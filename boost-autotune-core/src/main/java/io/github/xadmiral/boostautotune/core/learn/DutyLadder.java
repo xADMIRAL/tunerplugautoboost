@@ -63,7 +63,8 @@ public final class DutyLadder {
                 }
             }
             d = lo;
-            if (d <= last + 2) {
+            double minUseful = Math.max(2, cfg.characterizeStepPct / 3);
+            if (d <= last + 2 || (enoughRuns && d <= last + minUseful)) {
                 return new Step(last, true, String.format(Locale.US,
                         "next step would be predicted above %.0f kPa (limit %.0f - margin %.0f)",
                         limit, cfg.maxBoostKpa, cfg.predictionMarginKpa));

@@ -57,14 +57,19 @@ public final class AutotunePanel extends JPanel {
         this.beforeStart = beforeStart;
         setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        JPanel top = new JPanel(new GridLayout(0, 1));
+        JPanel top = new JPanel();
+        top.setLayout(new javax.swing.BoxLayout(top, javax.swing.BoxLayout.Y_AXIS));
         stateLabel.setFont(stateLabel.getFont().deriveFont(Font.BOLD, 15f));
+        stateLabel.setAlignmentX(LEFT_ALIGNMENT);
+        planLabel.setAlignmentX(LEFT_ALIGNMENT);
         top.add(stateLabel);
         top.add(planLabel);
         instructions.setEditable(false);
         instructions.setLineWrap(true);
         instructions.setWrapStyleWord(true);
         instructions.setBackground(getBackground());
+        instructions.setAlignmentX(LEFT_ALIGNMENT);
+        instructions.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, 60));
         top.add(instructions);
 
         JPanel liveRow = new JPanel(new GridLayout(2, 5, 8, 2));
@@ -80,6 +85,8 @@ public final class AutotunePanel extends JPanel {
             liveRow.add(cell);
         }
         liveRow.setBorder(BorderFactory.createTitledBorder("Live"));
+        liveRow.setAlignmentX(LEFT_ALIGNMENT);
+        liveRow.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, 90));
         top.add(liveRow);
         add(top, BorderLayout.NORTH);
 

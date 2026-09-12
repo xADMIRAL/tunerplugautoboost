@@ -63,7 +63,7 @@ public final class AutotuneConfig {
     /** Run open-loop duty ladder pulls before closing the loop (needs an open-loop duty table). */
     public boolean characterizeFirst = true;
     /** First ladder duty; 0 = minDuty + characterizeStepPct. */
-    public double characterizeStartDuty = 0;
+    public double characterizeStartDuty = 20;
     /** Duty increase between ladder runs. */
     public double characterizeStepPct = 15;
     /** Stop climbing once observed peak boost exceeds the highest stage target by this margin. */
@@ -80,8 +80,9 @@ public final class AutotuneConfig {
     public boolean biasInitialFillUnlimited = true;
     /** Extrapolate at most this far above the highest observed duty in a column. */
     public double biasMaxExtrapolationPct = 15;
-    /** Default plant gain used when nothing better is known: kPa of boost per percent duty. */
-    public double defaultGainKpaPerPct = 1.5;
+    /** Default plant gain used when nothing better is known: kPa of boost per percent duty. Deliberately on the
+     *  high side: it makes the ladder predict more boost (safer) and extrapolate smaller duty changes. */
+    public double defaultGainKpaPerPct = 2.0;
     /** Observation weights are multiplied by this after every run (recent data wins). */
     public double observationDecayPerRun = 0.6;
     /** Weight of a closed-loop steady sample relative to an open-loop one (PID activity adds noise). */

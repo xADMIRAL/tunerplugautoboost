@@ -44,14 +44,26 @@ class DutyLadderTest {
         PlantModel m = new PlantModel(Axis.of(3000, 5000), 2, 1.5);
         m.addObservation(5000, 20, 150, 1);
         m.addObservation(5000, 40, 175, 1);   // 1.25 kPa/% -> extrapolates with default gain 1.5
+        AutotuneConfig c = cfg();
+        c.maxBoostKpa = 205;                  // limit 190 kPa: 175 + (d-40)*1.5 <= 190 -> d <= 50
         List<Double> done = Arrays.asList(20.0, 40.0);
-        DutyLadder.Step s = DutyLadder.next(m, cfg(), 0, 100, done, 176);
-        // limit 185 kPa: 175 + (d-40)*1.5 <= 185 -> d <= 46.7
+        DutyLadder.Step s = DutyLadder.next(m, c, 0, 100, done, 176);
         assertFalse(s.done);
-        assertTrue(s.duty > 44 && s.duty < 47, "duty " + s.duty);
-        m.addObservation(5000, 46, 183, 1);
-        DutyLadder.Step s2 = DutyLadder.next(m, cfg(), 0, 100, Arrays.asList(20.0, 40.0, 46.0), 184);
+        assertTrue(s.duty > 48 && s.duty < 51, "duty " + s.duty);
+        m.addObservation(5000, 50, 189, 1);
+        DutyLadder.Step s2 = DutyLadder.next(m, c, 0, 100, Arrays.asList(20.0, 40.0, 50.0), 190);
         assertTrue(s2.done, s2.reason);
+    }
+
+    @Test
+    void tinyShrunkStepEndsTheLadderOnceEnoughRunsExist() {
+        PlantModel m = new PlantModel(Axis.of(3000, 5000), 2, 1.5);
+        m.addObservation(5000, 20, 150, 1);
+        m.addObservation(5000, 40, 175, 1);
+        // limit 185 kPa -> the shrunk step would be ~6.7 %, a third of the 20 % step: not worth a run
+        DutyLadder.Step s = DutyLadder.next(m, cfg(), 0, 100, Arrays.asList(20.0, 40.0), 176);
+        assertTrue(s.done, s.reason);
+        assertEquals(40, s.duty, 1e-9);
     }
 
     @Test

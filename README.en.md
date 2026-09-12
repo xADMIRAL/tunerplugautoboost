@@ -11,7 +11,7 @@ names preset. Best-effort presets exist for stock MS3 1.5+, Speeduino and rusEFI
 ## Workflow
 
 1. **Open-loop characterization (2–3 runs).** The ECU is switched to open loop, the duty table is
-   filled with a fixed duty (20 %, then +20 % per run). Steady samples build a duty → boost model
+   filled with a fixed duty (20 %, then +15 % per run). Steady samples build a duty → boost model
    per RPM column. The next rung is only planned if its predicted boost stays under
    `hard limit − prediction margin`; the ladder stops once the highest target was exceeded.
 2. **Bias table** = lowest duty that reaches each (RPM, target) cell; the knee is used where the
