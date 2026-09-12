@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>io.github.xadmiral.boostautotune</groupId>
+    <artifactId>boost-autotune-parent</artifactId>
+    <version>0.1.0</version>
+  </parent>
+
+  <artifactId>boost-autotune-plugin</artifactId>
+  <packaging>jar</packaging>
+  <name>Boost Autotune TunerStudio Plugin</name>
+  <description>Swing UI and TunerStudio glue. Produces BoostAutotune.jar for the TunerStudio plugins folder.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.xadmiral.boostautotune</groupId>
+      <artifactId>boost-autotune-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <!-- provided by TunerStudio at runtime; never bundled -->
+      <groupId>com.efiAnalytics</groupId>
+      <artifactId>TunerStudioPluginAPI</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>BoostAutotune</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <configuration>
+          <archive>
+            <manifestEntries>
+              <!-- TunerStudio discovers the plugin class through this manifest attribute. -->
+              <ApplicationPlugin>io.github.xadmiral.boostautotune.plugin.BoostAutotunePlugin</ApplicationPlugin>
+              <Implementation-Title>Boost Autotune</Implementation-Title>
+              <Implementation-Version>${project.version}</Implementation-Version>
+            </manifestEntries>
+          </archive>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <artifactSet>
+                <excludes>
+                  <exclude>com.efiAnalytics:*</exclude>
+                </excludes>
+              </artifactSet>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
