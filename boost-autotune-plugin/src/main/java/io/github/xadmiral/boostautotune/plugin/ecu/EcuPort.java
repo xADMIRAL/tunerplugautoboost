@@ -39,6 +39,9 @@ public interface EcuPort {
 
     void writeArray2D(String config, String name, double[][] raw) throws EcuException;
 
+    /** Writes a 1-D axis/array keeping the layout ([n][1] or [1][n]) the ECU layer uses. */
+    void writeArray1D(String config, String name, double[] values) throws EcuException;
+
     void burn(String config) throws EcuException;
 
     void subscribe(String config, List<String> channels, ChannelListener listener) throws EcuException;

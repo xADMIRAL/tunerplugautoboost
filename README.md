@@ -93,12 +93,73 @@ boost cut, MAP и скважность не меняются быстро, и т
 
 Во всех режимах есть *Restore original* (копия таблицы/коэффициентов снимается при старте),
 анализ готового лога (`Analyze datalog…`) и демо-кнопки в симуляторе (*Simulate pull*,
-*Simulate 60 s drive*).
+*Simulate 60 s drive*, *Simulate anti-lag*).
 
 Имена для Stealth PCM (пресет заполняет сам): VVT — `vvt_timing1` / `vvt_timing_rpm` /
 `vvt_timing_load` (Y = `fuelload`), каналы `vvt_ang1`, `vvt_target1`, PID `vvt_ctl_Kp/Ki/Kd`;
 зажигание — `advanceTable1` / `srpm_table1` / `smap_table1` (Y = `ignload`), каналы `advance`,
 `knockRetard`, `knock`, `afr1`.
+
+## Антилаг и режим дрифт
+
+Вкладка **Anti-lag** — две части: готовые пресеты дрифта, которые пишутся в ECU одной кнопкой, и
+настройки автотюна антилага (режим **Anti-lag: off-throttle boost autotune** в списке Mode).
+
+![Anti-lag tab: drift presets and autotune settings](docs/screenshots/antilag.png)
+
+### Готовые пресеты дрифта
+
+Таблица параметров MS3 (Stealth PCM), которые уходят в ECU по кнопке *Write selected groups to
+ECU*. Старые значения запоминаются для *Restore original*; после проверки — Burn в TunerStudio.
+Три группы, каждую можно отключить галочкой, любое значение можно поправить прямо в таблице до
+записи (например, вместо `Always ON` выбрать пин переключателя антилага):
+
+* **Anti-lag** — `als_in_pin` (вкл.), взвод выше `als_acttps` = 60 % TPS и работа ниже
+  `als_maxtps` = 12 % (aggressive: 15 %), обороты `als_minrpm`/`als_maxrpm` = 2500–6500 (7000),
+  `als_maxtime` = 3 с (5 с) на одно включение и пауза `als_pausetime` = 3 с (2 с), пределы
+  `als_minclt_C`/`als_maxclt_C`/`als_maxmat_C` = 70/105/65 °C (75 °C), способ — циклический
+  пропуск искры `als_opt_sc = On` (пропуск топлива `als_opt_fc` выключен: небезопасен), воздух
+  через РХХ `als_opt_idle = On` с `als_iac_steps` = 100 (140) шагов, оси `als_rpms` =
+  2000…7000 и `als_tpss` = 0…20, таблицы `als_timing` = −16 ° (−22 °) по всей таблице,
+  `als_addfuel` = 15 % (25 %), `als_sparkcut` = 30 % (50 %), `als_fuelcut` = 0.
+* **Flat shift** — `launch_opt_on = Launch/Flatshift`, `launchlimopt = Spark Cut`, взвод
+  `flats_arm` = 3500, жёсткий лимит `flats_hrd` = 6500 (7000), `flats_deg` = −5 °. Нужен
+  подключённый концевик сцепления.
+* **Over-run** — `OvrRunC = Off`: отсечка топлива на сбросе газа мешает антилагу, в дрифте её
+  выключают.
+
+Пресет **Off (street)** возвращает `als_in_pin = Off`, `launch_opt_on = Off`, `OvrRunC = On`.
+Параметров, которых нет в вашем INI, плагин просто не трогает (колонка *Current in ECU*).
+
+### Автотюн антилага
+
+Цель — держать заданное давление во впуске (по умолчанию 130 кПа абс.) **на закрытом газе**,
+пока антилаг активен, с минимально необходимым запаздыванием зажигания (= минимум тепла).
+Ручки: столбцы таблицы `als_timing` по оборотам (строки с TPS ≤ 20) и, если столбец упёрся в
+предел запаздывания, воздух через РХХ — `als_iac_steps` для шагового клапана или `als_iac_duty`
+для ШИМ (по `IdleCtl`).
+
+1. Записать дрифт-пресет (антилаг должен быть включён, иначе событий не будет — плагин
+   предупредит в логе).
+2. На вкладке Anti-lag выставить целевое давление и пределы, *Apply*; на Autotune выбрать режим
+   Anti-lag, *Start session* → *Write plan to ECU* → *Start run*.
+3. Заезд: полный газ выше `als_acttps` (взвод), затем **полный сброс газа на 2–3 с** — антилаг
+   держит буст; снова газ. 3–5 таких сбросов на прогон в рабочем диапазоне оборотов. *End run*
+   (или авто-завершение после паузы) → отчёт по столбцам: измеренное давление, ошибка, новое
+   запаздывание. *Apply & prepare next* — и следующий прогон. Готово после двух подряд хороших
+   прогонов; шаг по углу адаптивный (2 ° около цели, до 6 ° вдали от неё).
+
+![Anti-lag session recording (MAT and ALS flag in the live row)](docs/screenshots/autotune-antilag.png)
+
+Защиты: температура во впуске `mat` — предупреждение 70 °C (прогон не засчитывается), останов
+80 °C с возвратом исходной таблицы и `als_in_pin = Off`; защита от глохнущего мотора (обороты
+ниже 1200 при активном антилаге), overboost 200 кПа, не больше 30 с активного антилага за прогон.
+Активность антилага берётся из бита 128 канала `status10`; без него — по TPS ≤ 12 %.
+В симуляторе сессия сходится за 7 прогонов (тест `antilagSessionRetardsTimingToTheOffThrottleTarget`).
+
+**Осторожно.** Антилаг сжигает турбину, коллектор и катализатор: короткие прогоны, круги
+охлаждения между ними, ограничение `als_maxtime`, работающий датчик температуры во впуске и
+исправная система охлаждения обязательны. Не для улицы.
 
 ## Установка
 
@@ -193,28 +254,33 @@ boost-autotune-core/    чистая логика без зависимосте�
                         TorqueProxy (dRPM/dt по бинам оборотов)
   sweep/                SweepSession — перебор смещений для VVT/зажигания, KnockGuard, правило MBT
   vvt/                  VvtTrackingAnalyzer + VvtPidSession — оценка слежения и подстройка PID VVT
+  als/                  AlsSession — автотюн антилага (таблица als_timing + воздух РХХ, защиты MAT/stall)
   session/              AutotuneSession — конечный автомат сессии, RunPlan / RunReport, EcuState
   sim/                  BoostPlant + SimEcu + PullSimulator — симулятор для тестов и демо
   log/                  MslLogReader — чтение логов TunerStudio
 boost-autotune-plugin/  Swing UI и связка с TunerStudio
   ecu/                  EcuPort (интерфейс), TsEcuPort (TunerStudio API), SimEcuPort (демо),
                         EcuBinding + EcuPresets, EcuAdapter (ориентация таблиц, чтение/запись), LiveFeed
-  mode/                 ModeDriver: BoostDriver / SweepDriver / VvtPidDriver — режимы поверх ECU
-  ui/                   Autotune / Boost / VVT / Ignition / Setup / Analysis / Log
+  mode/                 ModeDriver: BoostDriver / SweepDriver / VvtPidDriver / AntilagDriver — режимы поверх ECU,
+                        AntilagPresets — пресеты дрифта (ALS / flat shift / over-run)
+  ui/                   Autotune / Boost / VVT / Ignition / Anti-lag / Setup / Analysis / Log
   BoostAutotunePlugin   точка входа (манифест: ApplicationPlugin)
   DemoLauncher          запуск UI с симулятором
 repo/                   вендоренный TunerStudioPluginAPI.jar (только для компиляции)
 ```
 
 Тесты: `mvn test` — юнит-тесты компонентов, сквозные тесты на симуляторе (буст, VVT-перебор,
-перебор зажигания с knock-лимитом и абортами, PID VVT), интеграционные тесты контроллера для всех
-режимов и headless-сборка UI.
+перебор зажигания с knock-лимитом и абортами, PID VVT, антилаг с защитами MAT/stall), интеграционные
+тесты контроллера для всех режимов и headless-сборка UI.
 
 ## Ограничения и что проверить на реальной машине
 
 * Ориентация `double[][]` в API TunerStudio для квадратных таблиц определяется настройкой — сверьте
   через *Read tables* перед первой сессией.
-* Плагин не меняет оси таблиц, частоту соленоида, лимит overboost и пин выхода.
+* Плагин не меняет оси таблиц буста/VVT/зажигания, частоту соленоида, лимит overboost и пин выхода
+  (оси `als_rpms`/`als_tpss` пишет только дрифт-пресет).
+* Модель антилага в симуляторе грубая (давление ≈ 90 кПа + 1.4 кПа/° запаздывания + воздух РХХ);
+  на машине шаги и пределы по углу стоит начать консервативно и следить за MAT/EGT.
 * Пресеты Speeduino и rusEFI собраны по их INI без проверки на железе. У Speeduino в open-loop
   скважность живёт в той же таблице, что и цели, поэтому характеризация для него отключена —
   обучение идёт только в closed-loop. У rusEFI нет отдельной bias-таблицы (open-loop таблица

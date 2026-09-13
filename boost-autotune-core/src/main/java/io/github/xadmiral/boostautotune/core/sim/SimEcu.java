@@ -42,6 +42,75 @@ public final class SimEcu {
     private double vvtClock;
     private final java.util.ArrayDeque<double[]> dutyHistory = new java.util.ArrayDeque<double[]>();
 
+    // ---- anti-lag: timing table (rpm x tps), idle valve air, arm/operate thresholds ----
+    public Grid alsTiming;
+    public double alsAir = 60;
+    public boolean alsEnabled;
+    public double alsArmTps = 50;
+    public double alsOperateTps = 12;
+    public double alsMinRpm = 2000;
+    public double alsMaxRpm = 7500;
+    public double alsMaxTimeSec = 4;
+    private boolean alsArmed;
+    private boolean alsActive;
+    private double alsTimer;
+    private double mat = 35;
+
+    public boolean alsActive() {
+        return alsActive;
+    }
+
+    /** A cool-down drive between runs. */
+    public void coolDown(double seconds) {
+        mat = Math.max(35, mat - 1.5 * seconds);
+    }
+
+    public double mat() {
+        return mat;
+    }
+
+    /** Steady-state manifold pressure the anti-lag would hold off throttle. */
+    public double alsSteadyMap(double rpm, double tps) {
+        if (alsTiming == null) {
+            return Double.NaN;
+        }
+        double t = alsTiming.lookup(rpm, tps);
+        double retard = Math.max(0, -t - 5);          // effect starts around -5 deg
+        double airEffect = Math.max(0, alsAir - 20) * 0.35;
+        double cap = 0.8 * plantCapacity(rpm);
+        return Math.min(cap, 90 + 1.4 * retard + airEffect);
+    }
+
+    private double plantCapacity(double rpm) {
+        return torque == null ? 200 : 105 + Math.min(140, Math.max(0, rpm - 1500) * 0.045);
+    }
+
+    /** Advances the anti-lag state machine and the intake temperature model. */
+    public void alsStep(double rpm, double tps, double dt) {
+        if (!alsEnabled || alsTiming == null) {
+            alsActive = false;
+            mat = Math.max(35, mat - 1.0 * dt);
+            return;
+        }
+        if (tps >= alsArmTps) {
+            alsArmed = true;
+            alsTimer = 0;
+        }
+        boolean cond = alsArmed && tps <= alsOperateTps && rpm >= alsMinRpm && rpm <= alsMaxRpm && alsTimer < alsMaxTimeSec;
+        if (cond) {
+            alsTimer += dt;
+            alsActive = true;
+            double retard = Math.max(0, -alsTiming.lookup(rpm, tps) - 5);
+            mat += (2.0 + 0.12 * retard) * dt;
+        } else {
+            if (alsActive && tps <= alsOperateTps) {
+                alsArmed = false; // timed out: must re-arm with throttle
+            }
+            alsActive = false;
+            mat = Math.max(35, mat - 1.5 * dt);
+        }
+    }
+
     // ---- ignition: spark table (rpm x ign load) and a safe-mode style knock control ----
     public Grid sparkTable;
     public TorqueModel torque = new TorqueModel();
@@ -105,6 +174,9 @@ public final class SimEcu {
     }
 
     public void resetAuxiliaries() {
+        alsArmed = false;
+        alsActive = false;
+        alsTimer = 0;
         camAngle = 0;
         camVel = 0;
         vvtIntegral = 0;

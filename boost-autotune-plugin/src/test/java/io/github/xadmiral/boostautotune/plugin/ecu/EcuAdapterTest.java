@@ -116,4 +116,49 @@ class EcuAdapterTest {
         List<String> problems = b.validate(port.channelNames(SimEcuPort.CONFIG), port.parameterNames(SimEcuPort.CONFIG));
         assertEquals(2, problems.size(), problems.toString());
     }
+
+    @Test
+    void antilagRoundTripAndGenericAccess() throws Exception {
+        SimEcuPort port = new SimEcuPort();
+        EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
+        EcuAdapter a = new EcuAdapter(port, b);
+        assertTrue(b.validateAntilag(port.channelNames(SimEcuPort.CONFIG), port.parameterNames(SimEcuPort.CONFIG)).isEmpty());
+        Grid t = a.readAlsTiming();
+        assertEquals(6, t.width());
+        assertEquals(6, t.height());
+        assertEquals(1300, t.xAxis().min(), 1e-9);
+        assertEquals(20, t.yAxis().max(), 1e-9);
+        Grid mod = t.copy();
+        mod.set(2, 0, -20);
+        a.writeAlsTiming(mod);
+        assertEquals(-20, port.readArray2D(SimEcuPort.CONFIG, b.alsTimingTable)[0][2], 1e-9);
+        assertEquals("als_iac_steps", a.alsAirParam());
+        assertEquals(150, a.readAlsAir(), 1e-9);
+        a.writeAlsAir(120);
+        assertEquals(120, port.readScalar(SimEcuPort.CONFIG, b.alsAirStepsParam), 1e-9);
+        assertEquals("Off", a.readAlsEnable());
+        a.writeAlsEnable("Always ON");
+        assertEquals("Always ON", port.readOption(SimEcuPort.CONFIG, b.alsEnableParam));
+        // generic access used by the drift presets
+        assertEquals("30", a.readAny("als_maxtps"));
+        a.writeAny("als_maxtps", "12");
+        assertEquals(12, port.readScalar(SimEcuPort.CONFIG, "als_maxtps"), 1e-9);
+        a.writeAny("als_opt_sc", "On");
+        assertEquals("On", a.readAny("als_opt_sc"));
+        a.writeAny(b.alsXBins, "2000 3000 4000 5000 6000 7000");
+        assertEquals(2000, a.readAlsTiming().xAxis().min(), 1e-9);
+        assertEquals(7000, a.readAlsTiming().xAxis().max(), 1e-9);
+        a.writeAny(b.alsTimingTable, "-16");
+        for (double[] row : port.readArray2D(SimEcuPort.CONFIG, b.alsTimingTable)) {
+            for (double v : row) {
+                assertEquals(-16, v, 1e-9);
+            }
+        }
+        assertTrue(a.readAny(b.alsTimingTable).startsWith("-16 -16"));
+        assertTrue(a.hasParameter("flats_arm"));
+        assertFalse(a.hasParameter("no_such_param"));
+        // a PWM idle valve switches the air knob to the duty parameter
+        port.writeOption(SimEcuPort.CONFIG, b.idleTypeParam, "PWM valve (2 or 3 wire)");
+        assertEquals("als_iac_duty", a.alsAirParam());
+    }
 }

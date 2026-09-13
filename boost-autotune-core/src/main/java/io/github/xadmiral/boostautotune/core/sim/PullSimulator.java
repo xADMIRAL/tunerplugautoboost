@@ -113,6 +113,40 @@ public final class PullSimulator {
         return out;
     }
 
+    /**
+     * Anti-lag exercise: a burst of throttle to arm the system, a full lift with the anti-lag
+     * holding boost, then back on the throttle. The RPM drifts down slowly while off throttle.
+     */
+    public List<Sample> alsCycle(int lifts) {
+        List<Sample> out = new ArrayList<Sample>();
+        double dt = 1.0 / sampleRateHz;
+        double rpm = 3800;
+        plant.reset(150);
+        for (int k = 0; k < lifts; k++) {
+            double end = time + 1.5;
+            while (time < end) {
+                out.add(tick(rpm, 100, dt, 3));
+                rpm = Math.min(5200, rpm + rpmRate(3, rpm) * 0.5 * dt);
+            }
+            end = time + 3.0;
+            while (time < end) {
+                out.add(tick(rpm, 3, dt, 3));
+                rpm = Math.max(2500, rpm - 250 * dt);
+            }
+            end = time + 2.5;
+            while (time < end) {
+                out.add(tick(rpm, 100, dt, 3));
+                rpm = Math.min(5200, rpm + rpmRate(3, rpm) * 0.5 * dt);
+            }
+            end = time + 2.0;
+            while (time < end) {
+                out.add(tick(rpm, 15, dt, 3));
+                rpm = Math.max(3000, rpm - 200 * dt);
+            }
+        }
+        return out;
+    }
+
     private Sample tick(double rpm, double tps, double dt, int gear) {
         double duty = 0;
         double map = plant.map();
@@ -122,7 +156,12 @@ public final class PullSimulator {
         double adv = Double.NaN;
         for (int i = 0; i < steps; i++) {
             duty = ecu.control(rpm, tps, plant.map(), sub);
-            noisy = plant.step(rpm, tps, duty, sub);
+            ecu.alsStep(rpm, tps, sub);
+            if (ecu.alsActive()) {
+                noisy = plant.stepTowards(ecu.alsSteadyMap(rpm, tps), sub);
+            } else {
+                noisy = plant.step(rpm, tps, duty, sub);
+            }
             ecu.vvtStep(rpm, plant.map(), sub);
             adv = ecu.sparkStep(rpm, plant.map(), tps, sub);
         }
@@ -135,6 +174,9 @@ public final class PullSimulator {
         }
         if (ecu.sparkTable != null) {
             b.advance(adv).knock(ecu.knockLevel()).knockRetard(ecu.knockRetard()).afr(tps >= 85 ? 11.8 : 14.7).afrTarget(tps >= 85 ? 11.8 : 14.7);
+        }
+        if (ecu.alsTiming != null) {
+            b.alsActive(ecu.alsActive()).mat(ecu.mat());
         }
         return b.build();
     }

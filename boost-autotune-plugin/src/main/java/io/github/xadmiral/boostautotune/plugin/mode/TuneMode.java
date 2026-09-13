@@ -5,7 +5,8 @@ public enum TuneMode {
     BOOST("Boost: closed-loop autotune (pulls)"),
     VVT_PID("VVT: closed-loop PID (normal driving)"),
     VVT_SWEEP("VVT: cam target sweep (pulls)"),
-    IGNITION_SWEEP("Ignition: advance sweep with knock guard (pulls)");
+    IGNITION_SWEEP("Ignition: advance sweep with knock guard (pulls)"),
+    ANTILAG("Anti-lag: off-throttle boost autotune (lifts)");
 
     private final String label;
 

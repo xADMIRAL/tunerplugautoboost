@@ -80,6 +80,39 @@ public final class SimEcuPort implements EcuPort {
         arrays.put(b.sparkTable, spark);
         arrays.put(b.sparkXBins, column(srpm));
         arrays.put(b.sparkYBins, column(sload));
+        // anti-lag: the base tune's rally-style defaults, ALS off
+        arrays.put(b.alsTimingTable, new double[][]{
+                {-30, -28, -26, -24, -22, -20}, {-30, -28, -26, -24, -22, -20}, {-30, -28, -26, -24, -22, -20},
+                {-30, -28, -26, -24, -22, -20}, {-30, -28, -26, -24, -22, -20}, {-30, -28, -26, -24, -22, -20}});
+        arrays.put(b.alsXBins, column(1300, 1600, 1900, 2200, 2500, 2800));
+        arrays.put(b.alsYBins, column(0, 4, 8, 12, 16, 20));
+        arrays.put("als_addfuel", filled(6, 6, 25));
+        arrays.put("als_sparkcut", filled(6, 6, 80));
+        arrays.put("als_fuelcut", filled(6, 6, 80));
+        scalars.put(b.alsAirStepsParam, 150.0);
+        scalars.put(b.alsAirDutyParam, 58.8);
+        scalars.put("als_acttps", 50.0);
+        scalars.put("als_maxtps", 30.0);
+        scalars.put("als_minrpm", 500.0);
+        scalars.put("als_maxrpm", 3000.0);
+        scalars.put("als_maxtime", 4.0);
+        scalars.put("als_pausetime", 10.0);
+        scalars.put("als_maxmat_C", 76.7);
+        scalars.put("als_minclt_C", 50.0);
+        scalars.put("als_maxclt_C", 110.0);
+        scalars.put("flats_arm", 3000.0);
+        scalars.put("flats_hrd", 6500.0);
+        scalars.put("flats_deg", -5.0);
+        scalars.put("launch_hrd_lim", 3800.0);
+        options.put(b.alsEnableParam, "Off");
+        options.put(b.idleTypeParam, "Stepper valve (6 wire)");
+        options.put("als_opt_sc", "Off");
+        options.put("als_opt_fc", "Off");
+        options.put("als_opt_idle", "Off");
+        options.put("als_opt_ri", "Off");
+        options.put("launch_opt_on", "Off");
+        options.put("launchlimopt", "Spark Cut");
+        options.put("OvrRunC", "On");
         applyAuxiliaries();
         sim = new PullSimulator(plant, ecu);
     }
@@ -89,6 +122,19 @@ public final class SimEcuPort implements EcuPort {
         ecu.vvtTable = grid(b.vvtTable, b.vvtXBins, b.vvtYBins);
         ecu.vvtPid = new PidGains(scalars.get(b.vvtPidP), scalars.get(b.vvtPidI), scalars.get(b.vvtPidD));
         ecu.sparkTable = grid(b.sparkTable, b.sparkXBins, b.sparkYBins);
+        ecu.alsTiming = grid(b.alsTimingTable, b.alsXBins, b.alsYBins);
+        ecu.alsAir = scalars.get(b.alsAirStepsParam);
+        ecu.alsEnabled = !"Off".equals(options.get(b.alsEnableParam));
+        ecu.alsArmTps = scalars.get("als_acttps");
+        ecu.alsOperateTps = scalars.get("als_maxtps");
+        ecu.alsMinRpm = scalars.get("als_minrpm");
+        ecu.alsMaxRpm = scalars.get("als_maxrpm");
+        ecu.alsMaxTimeSec = scalars.get("als_maxtime");
+    }
+
+    /** Cool-down between anti-lag runs (the demo has no wind). */
+    public void coolDown(double seconds) {
+        ecu.coolDown(seconds);
     }
 
     private EcuState toState() {
@@ -155,23 +201,30 @@ public final class SimEcuPort implements EcuPort {
     @Override
     public List<String> channelNames(String config) {
         return Arrays.asList("rpm", "tps", "map", "boost_targ_1", "boostduty", "coolant", "gear", "status2", "seconds",
-                "vvt_ang1", "vvt_target1", "fuelload", "ignload", "advance", "knock", "knockRetard", "afr1");
+                "vvt_ang1", "vvt_target1", "fuelload", "ignload", "advance", "knock", "knockRetard", "afr1", "status10", "mat");
     }
 
     @Override
     public ParamInfo parameterInfo(String config, String name) throws EcuException {
         if (arrays.containsKey(name)) {
             double[][] a = arrays.get(name);
-            double min = name.startsWith("advance") ? -45 : 0;
-            double max = name.contains("targets") ? 400 : name.startsWith("advance") ? 90 : name.startsWith("vvt_timing1") ? 720 : 100;
+            double min = name.startsWith("advance") || name.equals("als_timing") ? -50 : 0;
+            double max = name.contains("targets") ? 400 : name.startsWith("advance") ? 90 : name.startsWith("vvt_timing1") ? 720
+                    : name.equals("als_timing") ? 50 : name.equals("als_rpms") ? 25000 : 100;
             return new ParamInfo("array", "", min, max, 1, a[0].length, a.length, Collections.<String>emptyList());
         }
         if (scalars.containsKey(name)) {
-            return new ParamInfo("scalar", "%", 0, name.contains("Kp") || name.contains("Ki") || name.contains("Kd") ? 200 : 100,
-                    0, 1, 1, Collections.<String>emptyList());
+            double max = name.contains("Kp") || name.contains("Ki") || name.contains("Kd") ? 200 : name.equals("als_iac_steps") ? 255
+                    : name.contains("rpm") || name.contains("_arm") || name.contains("_hrd") || name.contains("_lim") ? 25000 : 100;
+            double min = name.equals("flats_deg") ? -90 : 0;
+            return new ParamInfo("scalar", "", min, max, name.equals("als_iac_steps") ? 0 : 1, 1, 1, Collections.<String>emptyList());
         }
         if (options.containsKey(name)) {
-            return new ParamInfo("bits", "", 0, 0, 0, 1, 1, Arrays.asList("Open-loop", "Closed-loop"));
+            List<String> opts = name.equals("als_in_pin") ? Arrays.asList("Off", "Always ON")
+                    : name.equals("launch_opt_on") ? Arrays.asList("Off", "Launch", "Launch/Flatshift")
+                    : name.equals("IdleCtl") ? Arrays.asList("None", "PWM valve (2 or 3 wire)", "Stepper valve (6 wire)")
+                    : Arrays.asList("Off", "On", "Open-loop", "Closed-loop");
+            return new ParamInfo("bits", "", 0, 0, 0, 1, 1, opts);
         }
         throw new EcuException("Unknown parameter " + name);
     }
@@ -250,6 +303,17 @@ public final class SimEcuPort implements EcuPort {
     }
 
     @Override
+    public void writeArray1D(String config, String name, double[] values) throws EcuException {
+        double[][] a = arrays.get(name);
+        if (a == null || a[0].length != 1 || a.length != values.length) {
+            throw new EcuException("Not a 1-D array of " + values.length + " bins: " + name);
+        }
+        arrays.put(name, column(values));
+        ecu.apply(toState());
+        applyAuxiliaries();
+    }
+
+    @Override
     public void burn(String config) {
         // nothing to persist in the demo
     }
@@ -278,7 +342,8 @@ public final class SimEcuPort implements EcuPort {
                 new UiTableInfo("Boost Control Bias Duty 1", b.biasXBins, b.biasYBins, b.biasTable, "rpm", "boost_targ_1"),
                 new UiTableInfo("Boost Control Duty 1", b.openLoopXBins, b.openLoopYBins, b.openLoopTable, "rpm", "throttle"),
                 new UiTableInfo("VVT Intake (Relative Timing)", b.vvtXBins, b.vvtYBins, b.vvtTable, "rpm", "vvt_load"),
-                new UiTableInfo("Ignition Table 1 (Spark Advance)", b.sparkXBins, b.sparkYBins, b.sparkTable, "rpm", "ignload"));
+                new UiTableInfo("Ignition Table 1 (Spark Advance)", b.sparkXBins, b.sparkYBins, b.sparkTable, "rpm", "ignload"),
+                new UiTableInfo("Anti-Lag Timing", b.alsXBins, b.alsYBins, b.alsTimingTable, "rpm", "tps"));
     }
 
     public boolean isPulling() {
@@ -291,15 +356,20 @@ public final class SimEcuPort implements EcuPort {
      * @param speedFactor 1 = real time, 10 = ten times faster
      */
     public void simulatePull(final int gear, final double speedFactor) {
-        stream(gear, speedFactor, false, 0);
+        stream(gear, speedFactor, 0, 0);
     }
 
     /** Streams ordinary driving (for the VVT PID mode). */
     public void simulateDrive(final double seconds, final double speedFactor) {
-        stream(3, speedFactor, true, seconds);
+        stream(3, speedFactor, 1, seconds);
     }
 
-    private void stream(final int gear, final double speedFactor, final boolean drive, final double seconds) {
+    /** Streams an anti-lag exercise: throttle bursts and full lifts with the anti-lag holding boost. */
+    public void simulateAntilag(final int lifts, final double speedFactor) {
+        stream(3, speedFactor, 2, lifts);
+    }
+
+    private void stream(final int gear, final double speedFactor, final int kind, final double arg) {
         if (pulling) {
             return;
         }
@@ -311,7 +381,7 @@ public final class SimEcuPort implements EcuPort {
                     ecu.apply(toState());
                     applyAuxiliaries();
                     ecu.resetAuxiliaries();
-                    List<Sample> samples = drive ? sim.drive(seconds) : sim.pull(gear);
+                    List<Sample> samples = kind == 1 ? sim.drive(arg) : kind == 2 ? sim.alsCycle((int) arg) : sim.pull(gear);
                     double last = Double.NaN;
                     for (Sample s : samples) {
                         if (!Double.isNaN(last)) {
@@ -337,6 +407,8 @@ public final class SimEcuPort implements EcuPort {
                         emit("knock", s.knock);
                         emit("knockRetard", s.knockRetard);
                         emit("afr1", s.afr);
+                        emit("status10", s.alsActive ? 128 : 0);
+                        emit("mat", s.mat);
                         emit("map", s.map); // trigger channel last
                     }
                     sim.setTime(sim.time() + 3);

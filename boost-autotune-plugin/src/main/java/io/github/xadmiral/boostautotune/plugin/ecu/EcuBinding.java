@@ -87,6 +87,22 @@ public final class EcuBinding {
     public String sparkYBins = "";
     public LoadSource sparkLoadSource = LoadSource.IGN_LOAD;
 
+    // ---- anti-lag ----
+    public String alsActiveChannel = "";
+    /** Bit mask on alsActiveChannel; 0 = any non-zero value. */
+    public int alsActiveMask = 0;
+    public String matChannel = "";
+    public String alsTimingTable = "";
+    public String alsXBins = "";
+    public String alsYBins = "";
+    /** Idle valve air parameter for stepper valves and for PWM valves; the adapter picks by idle type. */
+    public String alsAirStepsParam = "";
+    public String alsAirDutyParam = "";
+    public String idleTypeParam = "";
+    public String idleTypeStepperOption = "";
+    public String alsEnableParam = "";
+    public String alsDisableOption = "";
+
     public TableOrientation orientation = TableOrientation.AUTO;
 
     public boolean has(String name) {
@@ -136,6 +152,32 @@ public final class EcuBinding {
             checkParam(problems, params, "VVT table", vvtTable, true);
             checkParam(problems, params, "VVT table RPM bins", vvtXBins, true);
             checkParam(problems, params, "VVT table load bins", vvtYBins, true);
+        }
+        return problems;
+    }
+
+    public boolean hasAlsTable() {
+        return has(alsTimingTable) && has(alsXBins) && has(alsYBins);
+    }
+
+    /** Problems for the anti-lag autotune. */
+    public List<String> validateAntilag(List<String> channels, List<String> params) {
+        List<String> problems = new ArrayList<String>();
+        checkChannel(problems, channels, "RPM channel", rpmChannel, true);
+        checkChannel(problems, channels, "TPS channel", tpsChannel, true);
+        checkChannel(problems, channels, "MAP channel", mapChannel, true);
+        checkChannel(problems, channels, "CLT channel", cltChannel, false);
+        checkChannel(problems, channels, "ALS active channel", alsActiveChannel, false);
+        checkChannel(problems, channels, "MAT channel", matChannel, false);
+        checkParam(problems, params, "ALS timing table", alsTimingTable, true);
+        checkParam(problems, params, "ALS table RPM bins", alsXBins, true);
+        checkParam(problems, params, "ALS table TPS bins", alsYBins, true);
+        checkParam(problems, params, "ALS idle valve steps parameter", alsAirStepsParam, false);
+        checkParam(problems, params, "ALS idle valve duty parameter", alsAirDutyParam, false);
+        checkParam(problems, params, "Idle valve type parameter", idleTypeParam, false);
+        checkParam(problems, params, "ALS enable parameter", alsEnableParam, false);
+        if (!has(alsAirStepsParam) && !has(alsAirDutyParam)) {
+            problems.add("At least one ALS idle valve parameter (steps or duty) is required");
         }
         return problems;
     }
@@ -281,6 +323,18 @@ public final class EcuBinding {
         p.setProperty(prefix + "sparkXBins", sparkXBins);
         p.setProperty(prefix + "sparkYBins", sparkYBins);
         p.setProperty(prefix + "sparkLoadSource", sparkLoadSource.name());
+        p.setProperty(prefix + "alsActiveChannel", alsActiveChannel);
+        p.setProperty(prefix + "alsActiveMask", Integer.toString(alsActiveMask));
+        p.setProperty(prefix + "matChannel", matChannel);
+        p.setProperty(prefix + "alsTimingTable", alsTimingTable);
+        p.setProperty(prefix + "alsXBins", alsXBins);
+        p.setProperty(prefix + "alsYBins", alsYBins);
+        p.setProperty(prefix + "alsAirStepsParam", alsAirStepsParam);
+        p.setProperty(prefix + "alsAirDutyParam", alsAirDutyParam);
+        p.setProperty(prefix + "idleTypeParam", idleTypeParam);
+        p.setProperty(prefix + "idleTypeStepperOption", idleTypeStepperOption);
+        p.setProperty(prefix + "alsEnableParam", alsEnableParam);
+        p.setProperty(prefix + "alsDisableOption", alsDisableOption);
         p.setProperty(prefix + "orientation", orientation.name());
     }
 
@@ -341,6 +395,18 @@ public final class EcuBinding {
         sparkXBins = p.getProperty(prefix + "sparkXBins", sparkXBins);
         sparkYBins = p.getProperty(prefix + "sparkYBins", sparkYBins);
         sparkLoadSource = parseLoad(p.getProperty(prefix + "sparkLoadSource"), sparkLoadSource);
+        alsActiveChannel = p.getProperty(prefix + "alsActiveChannel", alsActiveChannel);
+        alsActiveMask = parseInt(p.getProperty(prefix + "alsActiveMask"), alsActiveMask);
+        matChannel = p.getProperty(prefix + "matChannel", matChannel);
+        alsTimingTable = p.getProperty(prefix + "alsTimingTable", alsTimingTable);
+        alsXBins = p.getProperty(prefix + "alsXBins", alsXBins);
+        alsYBins = p.getProperty(prefix + "alsYBins", alsYBins);
+        alsAirStepsParam = p.getProperty(prefix + "alsAirStepsParam", alsAirStepsParam);
+        alsAirDutyParam = p.getProperty(prefix + "alsAirDutyParam", alsAirDutyParam);
+        idleTypeParam = p.getProperty(prefix + "idleTypeParam", idleTypeParam);
+        idleTypeStepperOption = p.getProperty(prefix + "idleTypeStepperOption", idleTypeStepperOption);
+        alsEnableParam = p.getProperty(prefix + "alsEnableParam", alsEnableParam);
+        alsDisableOption = p.getProperty(prefix + "alsDisableOption", alsDisableOption);
         try {
             orientation = TableOrientation.valueOf(p.getProperty(prefix + "orientation", orientation.name()));
         } catch (IllegalArgumentException e) {

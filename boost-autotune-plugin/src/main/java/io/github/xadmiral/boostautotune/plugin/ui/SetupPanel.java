@@ -101,6 +101,18 @@ public final class SetupPanel extends JPanel {
             new Row("sparkXBins", "Spark table RPM bins (X)", "param"),
             new Row("sparkYBins", "Spark table load bins (Y)", "param"),
             new Row("sparkLoadSource", "Spark table Y axis source", "load"),
+            new Row("alsActiveChannel", "Anti-lag active channel (status bits)", "channel"),
+            new Row("alsActiveMask", "Anti-lag active bit mask (0 = non-zero)", "text"),
+            new Row("matChannel", "Intake air temperature channel (°C)", "channel"),
+            new Row("alsTimingTable", "Anti-lag timing table (Z)", "param"),
+            new Row("alsXBins", "Anti-lag table RPM bins (X)", "param"),
+            new Row("alsYBins", "Anti-lag table TPS bins (Y)", "param"),
+            new Row("alsAirStepsParam", "Anti-lag idle valve steps (stepper)", "param"),
+            new Row("alsAirDutyParam", "Anti-lag idle valve duty (PWM)", "param"),
+            new Row("idleTypeParam", "Idle valve type parameter", "param"),
+            new Row("idleTypeStepperOption", "  ... option meaning stepper", "text"),
+            new Row("alsEnableParam", "Anti-lag enable / input parameter", "param"),
+            new Row("alsDisableOption", "  ... option meaning OFF", "text"),
             new Row("orientation", "Table orientation", "orient"),
     };
 
@@ -288,6 +300,10 @@ public final class SetupPanel extends JPanel {
                 binding.sparkXBins = t.xParam;
                 binding.sparkYBins = t.yParam;
                 refined++;
+            } else if (t.zParam.equals(binding.alsTimingTable)) {
+                binding.alsXBins = t.xParam;
+                binding.alsYBins = t.yParam;
+                refined++;
             }
         }
         // fuzzy fallbacks for channels that differ between INI versions
@@ -306,10 +322,11 @@ public final class SetupPanel extends JPanel {
             sb.append(refined).append(" table axis bindings taken from the INI table definitions\n");
         }
         if (!tables.isEmpty()) {
-            sb.append("Boost / VVT / spark tables in this INI:\n");
+            sb.append("Boost / VVT / spark / anti-lag tables in this INI:\n");
             for (EcuPort.UiTableInfo t : tables) {
                 String l = t.toString().toLowerCase();
-                if (l.contains("boost") || l.contains("vvt") || l.contains("spark") || l.contains("ignition") || l.contains("adv")) {
+                if (l.contains("boost") || l.contains("vvt") || l.contains("spark") || l.contains("ignition") || l.contains("adv")
+                        || l.contains("als") || l.contains("anti") || l.contains("lag")) {
                     sb.append("  ").append(t).append('\n');
                 }
             }
@@ -338,6 +355,9 @@ public final class SetupPanel extends JPanel {
                 break;
             case IGNITION_SWEEP:
                 problems = binding.validateIgnition(ch, pa);
+                break;
+            case ANTILAG:
+                problems = binding.validateAntilag(ch, pa);
                 break;
             default:
                 problems = binding.validate(ch, pa);

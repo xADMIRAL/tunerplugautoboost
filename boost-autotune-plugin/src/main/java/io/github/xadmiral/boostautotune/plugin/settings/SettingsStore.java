@@ -1,5 +1,6 @@
 package io.github.xadmiral.boostautotune.plugin.settings;
 
+import io.github.xadmiral.boostautotune.core.als.AlsConfig;
 import io.github.xadmiral.boostautotune.core.config.AutotuneConfig;
 import io.github.xadmiral.boostautotune.core.sweep.SweepConfig;
 import io.github.xadmiral.boostautotune.core.vvt.VvtPidConfig;
@@ -43,6 +44,11 @@ public final class SettingsStore {
 
     public void save(AutotuneConfig cfg, SweepConfig vvtSweep, SweepConfig ignSweep, VvtPidConfig vvtPid,
                      EcuBinding binding, Properties uiPrefs) throws IOException {
+        save(cfg, vvtSweep, ignSweep, vvtPid, null, binding, uiPrefs);
+    }
+
+    public void save(AutotuneConfig cfg, SweepConfig vvtSweep, SweepConfig ignSweep, VvtPidConfig vvtPid, AlsConfig als,
+                     EcuBinding binding, Properties uiPrefs) throws IOException {
         Properties p = new Properties();
         configTo(cfg, p, "tune.");
         if (vvtSweep != null) {
@@ -53,6 +59,9 @@ public final class SettingsStore {
         }
         if (vvtPid != null) {
             vvtPidTo(vvtPid, p, "vvtpid.");
+        }
+        if (als != null) {
+            alsTo(als, p, "als.");
         }
         binding.store(p, "ecu.");
         if (uiPrefs != null) {
@@ -96,6 +105,11 @@ public final class SettingsStore {
 
     public void load(AutotuneConfig cfg, SweepConfig vvtSweep, SweepConfig ignSweep, VvtPidConfig vvtPid,
                      EcuBinding binding, Properties uiPrefs) throws IOException {
+        load(cfg, vvtSweep, ignSweep, vvtPid, null, binding, uiPrefs);
+    }
+
+    public void load(AutotuneConfig cfg, SweepConfig vvtSweep, SweepConfig ignSweep, VvtPidConfig vvtPid, AlsConfig als,
+                     EcuBinding binding, Properties uiPrefs) throws IOException {
         Properties p = loadRaw();
         configFrom(cfg, p, "tune.");
         if (vvtSweep != null) {
@@ -106,6 +120,9 @@ public final class SettingsStore {
         }
         if (vvtPid != null) {
             vvtPidFrom(vvtPid, p, "vvtpid.");
+        }
+        if (als != null) {
+            alsFrom(als, p, "als.");
         }
         binding.load(p, "ecu.");
         if (uiPrefs != null) {
@@ -328,6 +345,64 @@ public final class SettingsStore {
         c.tuneI = bool(p, pre + "tuneI", c.tuneI);
         c.tuneD = bool(p, pre + "tuneD", c.tuneD);
         c.runsRequired = (int) d(p, pre + "runsRequired", c.runsRequired);
+    }
+
+    public static void alsTo(AlsConfig c, Properties p, String pre) {
+        p.setProperty(pre + "targetKpa", fmt(c.targetKpa));
+        p.setProperty(pre + "tolKpa", fmt(c.tolKpa));
+        p.setProperty(pre + "offThrottleTps", fmt(c.offThrottleTps));
+        p.setProperty(pre + "onThrottleTps", fmt(c.onThrottleTps));
+        p.setProperty(pre + "minRpm", fmt(c.minRpm));
+        p.setProperty(pre + "maxRpm", fmt(c.maxRpm));
+        p.setProperty(pre + "settleSec", fmt(c.settleSec));
+        p.setProperty(pre + "minEventSec", fmt(c.minEventSec));
+        p.setProperty(pre + "minSamplesPerColumn", fmt(c.minSamplesPerColumn));
+        p.setProperty(pre + "timingStepDeg", fmt(c.timingStepDeg));
+        p.setProperty(pre + "minTimingDeg", fmt(c.minTimingDeg));
+        p.setProperty(pre + "maxTimingDeg", fmt(c.maxTimingDeg));
+        p.setProperty(pre + "maxRowTps", fmt(c.maxRowTps));
+        p.setProperty(pre + "tuneAir", Boolean.toString(c.tuneAir));
+        p.setProperty(pre + "airStep", fmt(c.airStep));
+        p.setProperty(pre + "airMin", fmt(c.airMin));
+        p.setProperty(pre + "airMax", fmt(c.airMax));
+        p.setProperty(pre + "maxMatC", fmt(c.maxMatC));
+        p.setProperty(pre + "abortMatC", fmt(c.abortMatC));
+        p.setProperty(pre + "stallRpm", fmt(c.stallRpm));
+        p.setProperty(pre + "maxBoostKpa", fmt(c.maxBoostKpa));
+        p.setProperty(pre + "maxActiveSecPerRun", fmt(c.maxActiveSecPerRun));
+        p.setProperty(pre + "respoolTargetKpa", fmt(c.respoolTargetKpa));
+        p.setProperty(pre + "respoolMaxSec", fmt(c.respoolMaxSec));
+        p.setProperty(pre + "runsRequired", Integer.toString(c.runsRequired));
+        p.setProperty(pre + "autoEndRunIdleSec", fmt(c.autoEndRunIdleSec));
+    }
+
+    public static void alsFrom(AlsConfig c, Properties p, String pre) {
+        c.targetKpa = d(p, pre + "targetKpa", c.targetKpa);
+        c.tolKpa = d(p, pre + "tolKpa", c.tolKpa);
+        c.offThrottleTps = d(p, pre + "offThrottleTps", c.offThrottleTps);
+        c.onThrottleTps = d(p, pre + "onThrottleTps", c.onThrottleTps);
+        c.minRpm = d(p, pre + "minRpm", c.minRpm);
+        c.maxRpm = d(p, pre + "maxRpm", c.maxRpm);
+        c.settleSec = d(p, pre + "settleSec", c.settleSec);
+        c.minEventSec = d(p, pre + "minEventSec", c.minEventSec);
+        c.minSamplesPerColumn = d(p, pre + "minSamplesPerColumn", c.minSamplesPerColumn);
+        c.timingStepDeg = d(p, pre + "timingStepDeg", c.timingStepDeg);
+        c.minTimingDeg = d(p, pre + "minTimingDeg", c.minTimingDeg);
+        c.maxTimingDeg = d(p, pre + "maxTimingDeg", c.maxTimingDeg);
+        c.maxRowTps = d(p, pre + "maxRowTps", c.maxRowTps);
+        c.tuneAir = bool(p, pre + "tuneAir", c.tuneAir);
+        c.airStep = d(p, pre + "airStep", c.airStep);
+        c.airMin = d(p, pre + "airMin", c.airMin);
+        c.airMax = d(p, pre + "airMax", c.airMax);
+        c.maxMatC = d(p, pre + "maxMatC", c.maxMatC);
+        c.abortMatC = d(p, pre + "abortMatC", c.abortMatC);
+        c.stallRpm = d(p, pre + "stallRpm", c.stallRpm);
+        c.maxBoostKpa = d(p, pre + "maxBoostKpa", c.maxBoostKpa);
+        c.maxActiveSecPerRun = d(p, pre + "maxActiveSecPerRun", c.maxActiveSecPerRun);
+        c.respoolTargetKpa = d(p, pre + "respoolTargetKpa", c.respoolTargetKpa);
+        c.respoolMaxSec = d(p, pre + "respoolMaxSec", c.respoolMaxSec);
+        c.runsRequired = (int) d(p, pre + "runsRequired", c.runsRequired);
+        c.autoEndRunIdleSec = d(p, pre + "autoEndRunIdleSec", c.autoEndRunIdleSec);
     }
 
     public static String joinDoubles(List<Double> xs) {

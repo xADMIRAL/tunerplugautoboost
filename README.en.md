@@ -38,6 +38,34 @@ names preset. Best-effort presets exist for stock MS3 1.5+, Speeduino and rusEFI
   advanced more than +4 deg over its original value. Not a dyno; needs working knock control and a
   wideband.
 
+## Anti-lag and drift mode
+
+The **Anti-lag** tab has two parts: ready-made drift presets written to the ECU in one click, and
+the settings of the anti-lag autotune (mode **Anti-lag: off-throttle boost autotune**).
+
+* **Drift presets (MS3 / Stealth PCM names).** Three groups, each can be unticked and every value
+  can be edited before writing: *Anti-lag* (`als_in_pin`, arm above `als_acttps` 60 % TPS, operate
+  below `als_maxtps` 12/15 %, 2500-6500/7000 rpm, `als_maxtime` 3/5 s, `als_pausetime`, CLT/MAT
+  limits, cyclic spark cut `als_opt_sc` on, idle valve air `als_opt_idle` with `als_iac_steps`
+  100/140, axes `als_rpms`/`als_tpss`, `als_timing` -16/-22 deg, `als_addfuel` 15/25 %,
+  `als_sparkcut` 30/50 %), *Flat shift* (`launch_opt_on = Launch/Flatshift`, spark cut, arm 3500,
+  hard limit 6500/7000, `flats_deg` -5) and *Over-run* (`OvrRunC = Off`, the over-run fuel cut
+  fights the anti-lag). The "Off (street)" preset switches it all back. Old values are kept for
+  **Restore original**; burn in TunerStudio when happy.
+* **Anti-lag autotune.** Goal: hold a chosen manifold pressure (default 130 kPa absolute) off
+  throttle while the anti-lag is active with the least ignition retard. Knobs: the RPM columns of
+  `als_timing` (rows with TPS <= 20), then idle valve air (`als_iac_steps` or `als_iac_duty`,
+  picked by `IdleCtl`) once a column hits the retard limit. A run is 3-5 full lifts from WOT
+  (arm above the ALS TPS, close the throttle for 2-3 s); the report shows measured boost, error
+  and the new retard per column; done after two good runs in a row. Guards: MAT warning 70 °C /
+  abort 80 °C (`mat` channel), stall guard 1200 rpm, overboost 200 kPa, at most 30 s of active
+  anti-lag per run; an abort restores the original table and sets `als_in_pin = Off`. ALS activity
+  comes from bit 128 of `status10`, or TPS <= 12 % without it. The simulator converges in
+  7 runs.
+
+Anti-lag cooks the turbo, the manifold and the catalyst: short runs, cool-down laps, a working
+intake air temperature sensor. Not for the street.
+
 ## Install
 
 Copy `BoostAutotune.jar` to `~/.efianalytics/TunerStudio/plugins/` (Windows:

@@ -78,6 +78,18 @@ public final class EcuPresets {
             b.sparkXBins = "srpm_table1";
             b.sparkYBins = "smap_table1";
             b.sparkLoadSource = LoadSource.IGN_LOAD;
+            b.alsActiveChannel = "status10";
+            b.alsActiveMask = 128;
+            b.matChannel = "mat";
+            b.alsTimingTable = "als_timing";
+            b.alsXBins = "als_rpms";
+            b.alsYBins = "als_tpss";
+            b.alsAirStepsParam = "als_iac_steps";
+            b.alsAirDutyParam = "als_iac_duty";
+            b.idleTypeParam = "IdleCtl";
+            b.idleTypeStepperOption = "Stepper valve (6 wire)";
+            b.alsEnableParam = "als_in_pin";
+            b.alsDisableOption = "Off";
         } else if (SPEEDUINO.equals(name)) {
             b.rpmChannel = "rpm";
             b.tpsChannel = "tps";

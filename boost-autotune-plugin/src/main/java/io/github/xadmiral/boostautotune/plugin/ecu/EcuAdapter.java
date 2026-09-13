@@ -21,6 +21,8 @@ public final class EcuAdapter {
     private TableLayout openLoopLayout;
     private TableLayout vvtLayout;
     private TableLayout sparkLayout;
+    private TableLayout alsLayout;
+    private EcuPort.ParamInfo alsTableInfo;
     private EcuPort.ParamInfo pInfo, iInfo, dInfo, targetInfo;
     private EcuPort.ParamInfo vvtPInfo, vvtIInfo, vvtDInfo, vvtTableInfo, sparkTableInfo;
 
@@ -217,6 +219,141 @@ public final class EcuAdapter {
 
     public EcuPort.ParamInfo vvtPidInfo(int which) {
         return which == 0 ? vvtPInfo : which == 1 ? vvtIInfo : vvtDInfo;
+    }
+
+    // ---- anti-lag -----------------------------------------------------------------------------
+
+    public Grid readAlsTiming() throws EcuException {
+        String cfg = config();
+        alsTableInfo = port.parameterInfo(cfg, b.alsTimingTable);
+        alsLayout = layoutFor(cfg, b.alsTimingTable, b.alsXBins, b.alsYBins, alsTableInfo);
+        return readGrid(cfg, b.alsTimingTable, b.alsXBins, b.alsYBins, alsLayout);
+    }
+
+    public void writeAlsTiming(Grid g) throws EcuException {
+        if (alsLayout == null) {
+            readAlsTiming();
+        }
+        port.writeArray2D(config(), b.alsTimingTable, alsLayout.fromGrid(g));
+    }
+
+    public EcuPort.ParamInfo alsTableInfo() {
+        return alsTableInfo;
+    }
+
+    /** The idle valve parameter that applies to this ECU's valve type (steps for steppers, duty for PWM). */
+    public String alsAirParam() {
+        boolean stepper = b.has(b.alsAirStepsParam);
+        if (b.has(b.idleTypeParam) && b.has(b.idleTypeStepperOption) && b.has(b.alsAirStepsParam) && b.has(b.alsAirDutyParam)) {
+            try {
+                String type = port.readOption(config(), b.idleTypeParam);
+                stepper = type != null && type.trim().equalsIgnoreCase(b.idleTypeStepperOption.trim());
+            } catch (EcuException e) {
+                stepper = true;
+            }
+        }
+        if (stepper && b.has(b.alsAirStepsParam)) {
+            return b.alsAirStepsParam;
+        }
+        return b.has(b.alsAirDutyParam) ? b.alsAirDutyParam : b.alsAirStepsParam;
+    }
+
+    public double readAlsAir() throws EcuException {
+        return port.readScalar(config(), alsAirParam());
+    }
+
+    public void writeAlsAir(double v) throws EcuException {
+        port.writeScalar(config(), alsAirParam(), v);
+    }
+
+    public EcuPort.ParamInfo alsAirInfo() throws EcuException {
+        return port.parameterInfo(config(), alsAirParam());
+    }
+
+    public String readAlsEnable() throws EcuException {
+        return b.has(b.alsEnableParam) ? port.readOption(config(), b.alsEnableParam) : null;
+    }
+
+    public void writeAlsEnable(String option) throws EcuException {
+        if (b.has(b.alsEnableParam) && option != null) {
+            port.writeOption(config(), b.alsEnableParam, option);
+        }
+    }
+
+    // ---- generic access for presets ------------------------------------------------------------
+
+    /** Reads any parameter as text: options as their label, scalars as a number, arrays as rows. */
+    public String readAny(String name) throws EcuException {
+        String cfg = config();
+        EcuPort.ParamInfo info = port.parameterInfo(cfg, name);
+        if ("bits".equalsIgnoreCase(info.paramClass)) {
+            return port.readOption(cfg, name);
+        }
+        if ("array".equalsIgnoreCase(info.paramClass)) {
+            double[][] raw = port.readArray2D(cfg, name);
+            StringBuilder sb = new StringBuilder();
+            for (double[] row : raw) {
+                if (sb.length() > 0) {
+                    sb.append("; ");
+                }
+                for (int i = 0; i < row.length; i++) {
+                    if (i > 0) {
+                        sb.append(' ');
+                    }
+                    sb.append(io.github.xadmiral.boostautotune.plugin.settings.SettingsStore.fmt(row[i]));
+                }
+            }
+            return sb.toString();
+        }
+        return io.github.xadmiral.boostautotune.plugin.settings.SettingsStore.fmt(port.readScalar(cfg, name));
+    }
+
+    /**
+     * Writes any parameter from text: an option label for bits, a number for scalars, a single
+     * number to fill a whole array or a space separated list for a 1-D axis.
+     */
+    public void writeAny(String name, String value) throws EcuException {
+        String cfg = config();
+        EcuPort.ParamInfo info = port.parameterInfo(cfg, name);
+        String v = value == null ? "" : value.trim();
+        if ("bits".equalsIgnoreCase(info.paramClass)) {
+            port.writeOption(cfg, name, v);
+            return;
+        }
+        if ("array".equalsIgnoreCase(info.paramClass)) {
+            String[] parts = v.replace(';', ' ').trim().split("[\\s,]+");
+            double[][] raw = port.readArray2D(cfg, name);
+            if (parts.length == 1) {
+                double fill = parseNumber(name, parts[0]);
+                for (double[] row : raw) {
+                    java.util.Arrays.fill(row, fill);
+                }
+                port.writeArray2D(cfg, name, raw);
+                return;
+            }
+            double[] vals = new double[parts.length];
+            for (int i = 0; i < parts.length; i++) {
+                vals[i] = parseNumber(name, parts[i]);
+            }
+            if (raw.length == 1 || raw[0].length == 1) {
+                port.writeArray1D(cfg, name, vals);
+                return;
+            }
+            throw new EcuException(name + ": give one number to fill the table, or a bin list for a 1-D axis");
+        }
+        port.writeScalar(cfg, name, parseNumber(name, v));
+    }
+
+    private static double parseNumber(String name, String s) throws EcuException {
+        try {
+            return Double.parseDouble(s.trim().replace(',', '.'));
+        } catch (NumberFormatException e) {
+            throw new EcuException(name + ": '" + s + "' is not a number");
+        }
+    }
+
+    public boolean hasParameter(String name) {
+        return port.parameterNames(config()).contains(name);
     }
 
     // ---- ignition -----------------------------------------------------------------------------

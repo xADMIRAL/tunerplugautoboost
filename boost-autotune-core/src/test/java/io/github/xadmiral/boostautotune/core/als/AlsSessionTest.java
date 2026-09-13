@@ -1,0 +1,155 @@
+package io.github.xadmiral.boostautotune.core.als;
+
+import io.github.xadmiral.boostautotune.core.model.Axis;
+import io.github.xadmiral.boostautotune.core.model.Grid;
+import io.github.xadmiral.boostautotune.core.model.PidGains;
+import io.github.xadmiral.boostautotune.core.model.Sample;
+import io.github.xadmiral.boostautotune.core.session.EcuState;
+import io.github.xadmiral.boostautotune.core.session.SessionState;
+import io.github.xadmiral.boostautotune.core.sim.BoostPlant;
+import io.github.xadmiral.boostautotune.core.sim.PullSimulator;
+import io.github.xadmiral.boostautotune.core.sim.SimEcu;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class AlsSessionTest {
+    private static final Axis RPM = Axis.of(2000, 3000, 4000, 5000, 6000, 7000);
+    private static final Axis TPS = Axis.of(0, 4, 8, 12, 16, 20);
+
+    private static SimEcu ecu() {
+        EcuState e = new EcuState();
+        Axis r8 = Axis.of(500, 1000, 2000, 3000, 4000, 5000, 6000, 7000);
+        e.targetTable = Grid.filled(r8, Axis.of(0, 20, 40, 60, 70, 80, 90, 100), 100);
+        e.openLoopTable = Grid.filled(r8, Axis.of(0, 20, 40, 60, 70, 80, 90, 100), 45);
+        e.pid = new PidGains(100, 50, 50);
+        e.closedLoop = false;
+        SimEcu ecu = new SimEcu(e);
+        ecu.alsEnabled = true;
+        ecu.alsOperateTps = 12;
+        ecu.alsMaxTimeSec = 4;
+        return ecu;
+    }
+
+    private static int run(AlsSession session, SimEcu ecu, PullSimulator sim, int maxRuns) {
+        int runs = 0;
+        AlsSession.Plan plan = session.plan();
+        while (session.state() != SessionState.DONE && session.state() != SessionState.ABORTED && runs < maxRuns) {
+            ecu.alsTiming = plan.timing;
+            ecu.alsAir = plan.air;
+            ecu.resetAuxiliaries();
+            session.startRun();
+            for (Sample s : sim.alsCycle(3)) {
+                session.onSample(s);
+                if (session.state() == SessionState.ABORTED) {
+                    return runs;
+                }
+            }
+            sim.setTime(sim.time() + 20);
+            ecu.coolDown(60);
+            AlsSession.Report r = session.endRun();
+            System.out.println(r.summary(session.config()));
+            plan = session.commit(r);
+            runs++;
+        }
+        return runs;
+    }
+
+    @Test
+    void retardsUntilOffThrottleBoostReachesTheTarget() {
+        SimEcu ecu = ecu();
+        PullSimulator sim = new PullSimulator(new BoostPlant(21), ecu);
+        Grid start = Grid.filled(RPM, TPS, -8); // barely any anti-lag
+        ecu.alsTiming = start;
+        ecu.alsAir = 60;
+        AlsConfig cfg = new AlsConfig();
+        cfg.targetKpa = 130;
+        cfg.autoEndRunIdleSec = 0;
+        AlsSession session = new AlsSession(cfg);
+        session.initialize(start, 60);
+        int runs = run(session, ecu, sim, 15);
+        assertEquals(SessionState.DONE, session.state(), "aborted: " + session.abortReason());
+        assertTrue(runs <= 12, "runs " + runs);
+        Grid result = session.plan().timing;
+        // the visited columns (around 3000-5000 rpm) got more retard, unvisited ones stayed
+        assertTrue(result.get(2, 0) < -14, "4000 rpm should be retarded: " + result.get(2, 0));
+        assertEquals(-8, result.get(5, 0), 1e-9);
+        assertEquals(60, session.plan().air, 1e-9);
+        assertTrue(session.lastReport().converged);
+    }
+
+    @Test
+    void addsAirWhenTheTimingLimitIsReached() {
+        SimEcu ecu = ecu();
+        PullSimulator sim = new PullSimulator(new BoostPlant(22), ecu);
+        Grid start = Grid.filled(RPM, TPS, -18);
+        ecu.alsTiming = start;
+        ecu.alsAir = 20;
+        AlsConfig cfg = new AlsConfig();
+        cfg.targetKpa = 150;
+        cfg.minTimingDeg = -20; // tight retard limit: air has to do the rest
+        cfg.autoEndRunIdleSec = 0;
+        AlsSession session = new AlsSession(cfg);
+        session.initialize(start, 20);
+        int runs = run(session, ecu, sim, 15);
+        assertEquals(SessionState.DONE, session.state(), "aborted: " + session.abortReason());
+        assertTrue(session.plan().air > 20, "air should have been raised: " + session.plan().air);
+        assertTrue(session.plan().timing.get(2, 0) >= -20 - 1e-9);
+        assertTrue(runs <= 14, "runs " + runs);
+    }
+
+    @Test
+    void hotIntakeAbortsAndUndoValuesAreKept() {
+        SimEcu ecu = ecu();
+        PullSimulator sim = new PullSimulator(new BoostPlant(23), ecu);
+        Grid start = Grid.filled(RPM, TPS, -30);
+        ecu.alsTiming = start;
+        AlsConfig cfg = new AlsConfig();
+        cfg.maxMatC = 40;
+        cfg.abortMatC = 45; // the model heats the intake by a few degrees per second of anti-lag
+        cfg.autoEndRunIdleSec = 0;
+        AlsSession session = new AlsSession(cfg);
+        session.initialize(start, 60);
+        run(session, ecu, sim, 3);
+        assertEquals(SessionState.ABORTED, session.state());
+        assertTrue(session.abortReason().contains("MAT"), session.abortReason());
+        assertEquals(-30, session.originalTiming().get(0, 0), 1e-9);
+        assertEquals(60, session.originalAir(), 1e-9);
+    }
+
+    @Test
+    void stallGuardAndInferredActivityWithoutEcuFlag() {
+        AlsConfig cfg = new AlsConfig();
+        cfg.autoEndRunIdleSec = 0;
+        AlsSession session = new AlsSession(cfg);
+        session.initialize(Grid.filled(RPM, TPS, -15), 60);
+        session.startRun();
+        double t = 0;
+        for (int i = 0; i < 20; i++, t += 0.04) {
+            session.onSample(Sample.builder().time(t).rpm(4000).tps(100).map(150).clt(90).build()); // arms
+        }
+        for (int i = 0; i < 20; i++, t += 0.04) {
+            session.onSample(Sample.builder().time(t).rpm(3500).tps(3).map(120).clt(90).build());   // inferred ALS window
+        }
+        assertEquals(1, session.eventsInRun());
+        session.onSample(Sample.builder().time(t).rpm(1000).tps(3).map(100).clt(90).build());
+        assertEquals(SessionState.ABORTED, session.state());
+        assertTrue(session.abortReason().contains("stall"));
+    }
+
+    @Test
+    void noEventsAsksForRepeat() {
+        AlsConfig cfg = new AlsConfig();
+        cfg.autoEndRunIdleSec = 0;
+        AlsSession session = new AlsSession(cfg);
+        session.initialize(Grid.filled(RPM, TPS, -15), 60);
+        session.startRun();
+        for (int i = 0; i < 50; i++) {
+            session.onSample(Sample.builder().time(i * 0.04).rpm(3000).tps(30).map(100).clt(90).build());
+        }
+        AlsSession.Report r = session.endRun();
+        assertFalse(r.converged);
+        assertTrue(r.messages.get(0).contains("No anti-lag event"));
+        assertEquals(-15, r.nextPlan.timing.get(0, 0), 1e-9);
+    }
+}

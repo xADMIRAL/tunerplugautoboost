@@ -60,6 +60,15 @@ public final class BoostPlant {
         return Stats.clamp(0.55 - (rpm - 2000) / 4000 * 0.35, 0.18, 0.55);
     }
 
+    /** Lets an external model (anti-lag) pull the manifold towards a pressure of its own. */
+    public double stepTowards(double target, double dt) {
+        double tau = 0.35;
+        double delta = (target - map) * (dt / tau);
+        delta = Stats.clamp(delta, -400 * dt, 200 * dt);
+        map += delta;
+        return map + rnd.nextGaussian() * noiseKpa;
+    }
+
     /** Advances the plant by dt seconds. */
     public double step(double rpm, double tps, double duty, double dt) {
         double target;

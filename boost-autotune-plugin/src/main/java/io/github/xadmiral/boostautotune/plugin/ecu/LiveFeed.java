@@ -34,7 +34,8 @@ public final class LiveFeed implements EcuPort.ChannelListener {
         List<String> out = new ArrayList<String>();
         for (String c : new String[]{b.rpmChannel, b.tpsChannel, b.mapChannel, b.targetChannel, b.dutyChannel,
                 b.cltChannel, b.gearChannel, b.boostCutChannel, b.timeChannel, b.vvtAngleChannel, b.vvtTargetChannel,
-                b.fuelLoadChannel, b.advanceChannel, b.knockChannel, b.knockRetardChannel, b.afrChannel, b.ignLoadChannel}) {
+                b.fuelLoadChannel, b.advanceChannel, b.knockChannel, b.knockRetardChannel, b.afrChannel, b.ignLoadChannel,
+                b.alsActiveChannel, b.matChannel}) {
             if (b.has(c) && !out.contains(c)) {
                 out.add(c);
             }
@@ -70,6 +71,11 @@ public final class LiveFeed implements EcuPort.ChannelListener {
             double v = get(b.boostCutChannel, 0);
             cut = b.boostCutMask == 0 ? v != 0 : (((long) v) & b.boostCutMask) != 0;
         }
+        boolean als = false;
+        if (b.has(b.alsActiveChannel)) {
+            double v = get(b.alsActiveChannel, 0);
+            als = b.alsActiveMask == 0 ? v != 0 : (((long) v) & b.alsActiveMask) != 0;
+        }
         return Sample.builder()
                 .time(t)
                 .rpm(get(b.rpmChannel, 0))
@@ -88,6 +94,8 @@ public final class LiveFeed implements EcuPort.ChannelListener {
                 .knock(optional(b.knockChannel))
                 .knockRetard(optional(b.knockRetardChannel))
                 .afr(optional(b.afrChannel))
+                .mat(optional(b.matChannel))
+                .alsActive(als)
                 .build();
     }
 

@@ -1,5 +1,6 @@
 package io.github.xadmiral.boostautotune.plugin.ui;
 
+import io.github.xadmiral.boostautotune.core.als.AlsConfig;
 import io.github.xadmiral.boostautotune.core.config.AutotuneConfig;
 import io.github.xadmiral.boostautotune.core.learn.SampleState;
 import io.github.xadmiral.boostautotune.core.model.Sample;
@@ -28,6 +29,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
     private final SweepConfig vvtSweep = SweepConfig.vvtDefaults();
     private final SweepConfig ignSweep = SweepConfig.ignitionDefaults();
     private final VvtPidConfig vvtPid = new VvtPidConfig();
+    private final AlsConfig als = new AlsConfig();
     private final EcuBinding binding;
     private final SettingsStore store;
     private final TuneController ctl;
@@ -35,6 +37,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
     private final TargetsPanel targets;
     private final VvtPanel vvtPanel;
     private final IgnitionPanel ignitionPanel;
+    private final AntilagPanel antilagPanel;
     private final AutotunePanel autotune;
     private final AnalysisPanel analysis;
     private final LogPanel logPanel = new LogPanel();
@@ -46,7 +49,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
         if (store != null && store.exists()) {
             try {
-                store.load(cfg, vvtSweep, ignSweep, vvtPid, b, new Properties());
+                store.load(cfg, vvtSweep, ignSweep, vvtPid, als, b, new Properties());
             } catch (IOException e) {
                 b = EcuPresets.create(EcuPresets.STEALTH_PCM);
             }
@@ -72,6 +75,11 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         targets = new TargetsPanel(cfg, binding, port, save);
         vvtPanel = new VvtPanel(vvtSweep, vvtPid, save);
         ignitionPanel = new IgnitionPanel(ignSweep, save);
+        antilagPanel = new AntilagPanel(als, binding, port, save, new AntilagPanel.Log() {
+            public void line(String s) {
+                logPanel.append(s);
+            }
+        });
         autotune = new AutotunePanel(ctl, new Runnable() {
             public void run() {
                 startSession();
@@ -82,6 +90,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         tabs.addTab("Boost", targets);
         tabs.addTab("VVT", vvtPanel);
         tabs.addTab("Ignition", ignitionPanel);
+        tabs.addTab("Anti-lag", antilagPanel);
         tabs.addTab("Setup", setup);
         tabs.addTab("Analysis", analysis);
         tabs.addTab("Log", logPanel);
@@ -108,6 +117,14 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         return vvtPid;
     }
 
+    public AlsConfig alsConfig() {
+        return als;
+    }
+
+    public AntilagPanel antilagPanel() {
+        return antilagPanel;
+    }
+
     public EcuBinding binding() {
         return binding;
     }
@@ -125,7 +142,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
             return;
         }
         try {
-            store.save(cfg, vvtSweep, ignSweep, vvtPid, binding, new Properties());
+            store.save(cfg, vvtSweep, ignSweep, vvtPid, als, binding, new Properties());
         } catch (IOException e) {
             logPanel.append("Could not save settings: " + e.getMessage());
         }
@@ -144,6 +161,10 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
             case IGNITION_SWEEP:
                 settingsTab = ignitionPanel;
                 ok = ignitionPanel.apply();
+                break;
+            case ANTILAG:
+                settingsTab = antilagPanel;
+                ok = antilagPanel.apply();
                 break;
             default:
                 settingsTab = targets;
@@ -183,6 +204,14 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
                         + " deg aborts and restores the original table.\n"
                         + "The ECU's own knock control must be enabled and a wideband must be connected.";
                 break;
+            case ANTILAG:
+                text = "START AN ANTI-LAG AUTOTUNE SESSION?\n\n"
+                        + "Off-throttle target " + als.targetKpa + " kPa (+/- " + als.tolKpa + "), timing " + als.minTimingDeg + ".." + als.maxTimingDeg
+                        + " deg, MAT abort " + als.abortMatC + " C, hard limit " + als.maxBoostKpa + " kPa.\n"
+                        + "The plugin writes the ALS timing table and the idle valve air between runs; a copy is kept for 'Restore original'.\n"
+                        + "The anti-lag must be switched on in the ECU (write a drift preset first).\n"
+                        + "Anti-lag makes the turbo and the manifold glow: short runs, cool-down laps, and lift the ALS switch if anything smells.";
+                break;
             default:
                 text = "Start a boost autotune session?\n\n"
                         + "Targets: " + cfg.targetStagesKpa + " kPa, hard limit " + cfg.maxBoostKpa + " kPa.\n"
@@ -204,6 +233,9 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
                     break;
                 case IGNITION_SWEEP:
                     ctl.startSweepSession(ignSweep, binding);
+                    break;
+                case ANTILAG:
+                    ctl.startAntilagSession(als, binding);
                     break;
                 default:
                     ctl.startSession(cfg, binding);

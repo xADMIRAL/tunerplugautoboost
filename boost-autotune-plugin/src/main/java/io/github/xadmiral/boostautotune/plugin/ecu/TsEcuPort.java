@@ -150,6 +150,31 @@ public final class TsEcuPort implements EcuPort {
     }
 
     @Override
+    public void writeArray1D(String config, String name, double[] values) throws EcuException {
+        double[][] raw = param(config, name).getArrayValues();
+        if (raw == null || raw.length == 0) {
+            throw new EcuException("Parameter " + name + " has no array values");
+        }
+        double[][] out;
+        if (raw.length == 1) {
+            if (raw[0].length != values.length) {
+                throw new EcuException("Axis " + name + " has " + raw[0].length + " bins, got " + values.length);
+            }
+            out = new double[1][];
+            out[0] = values.clone();
+        } else {
+            if (raw.length != values.length || raw[0].length != 1) {
+                throw new EcuException("Axis " + name + " has " + raw.length + " bins, got " + values.length);
+            }
+            out = new double[values.length][1];
+            for (int i = 0; i < values.length; i++) {
+                out[i][0] = values[i];
+            }
+        }
+        writeArray2D(config, name, out);
+    }
+
+    @Override
     public void burn(String config) throws EcuException {
         try {
             params().burnData(config);

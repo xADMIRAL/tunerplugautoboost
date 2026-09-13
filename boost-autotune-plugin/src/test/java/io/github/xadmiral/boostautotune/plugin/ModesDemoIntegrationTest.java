@@ -1,5 +1,9 @@
 package io.github.xadmiral.boostautotune.plugin;
 
+import io.github.xadmiral.boostautotune.core.als.AlsConfig;
+import io.github.xadmiral.boostautotune.core.als.AlsSession;
+import io.github.xadmiral.boostautotune.plugin.ecu.EcuAdapter;
+import io.github.xadmiral.boostautotune.plugin.mode.AntilagPresets;
 import io.github.xadmiral.boostautotune.core.learn.SampleState;
 import io.github.xadmiral.boostautotune.core.model.Sample;
 import io.github.xadmiral.boostautotune.core.session.SessionState;
@@ -176,5 +180,62 @@ class ModesDemoIntegrationTest {
         assertTrue(port.readScalar(SimEcuPort.CONFIG, b.vvtPidP) < 200);
         ctl.restoreOriginal();
         assertEquals(200, port.readScalar(SimEcuPort.CONFIG, b.vvtPidP), 1e-9);
+    }
+
+    @Test
+    void antilagSessionRetardsTimingToTheOffThrottleTarget() throws Exception {
+        SimEcuPort port = new SimEcuPort();
+        Collector listener = new Collector();
+        TuneController ctl = new TuneController(listener);
+        ctl.setPort(port);
+        EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
+        b.timeChannel = "seconds";
+        // a drift preset switches the anti-lag on and sets its axes / thresholds
+        EcuAdapter setup = new EcuAdapter(port, b);
+        int written = 0;
+        for (AntilagPresets.Setting s : AntilagPresets.create(AntilagPresets.DRIFT_MILD)) {
+            if (setup.hasParameter(s.param)) {
+                setup.writeAny(s.param, s.value);
+                written++;
+            }
+        }
+        assertTrue(written >= 20, "preset parameters written: " + written);
+        assertEquals("Always ON", port.readOption(SimEcuPort.CONFIG, b.alsEnableParam));
+        assertEquals(2000, port.readArray2D(SimEcuPort.CONFIG, b.alsXBins)[0][0], 1e-9);
+        // start from a weak anti-lag so the autotune has work to do
+        setup.writeAny(b.alsTimingTable, "-8");
+        setup.writeAny(b.alsAirStepsParam, "60");
+        AlsConfig cfg = new AlsConfig();
+        cfg.targetKpa = 130;
+        cfg.autoEndRunIdleSec = 0;
+        ctl.startAntilagSession(cfg, b);
+        assertEquals(TuneMode.ANTILAG, ctl.mode());
+        int runs = 0;
+        while (ctl.state() != SessionState.DONE && runs < 12) {
+            ctl.writePlanToEcu();
+            ctl.startRun();
+            port.simulateAntilag(3, 1000);
+            waitForStream(port);
+            port.coolDown(60);
+            assertNotEquals(SessionState.ABORTED, ctl.state(), ctl.abortReason());
+            AlsSession.Report r = (AlsSession.Report) ctl.endRun();
+            assertSame(r, listener.last);
+            assertTrue(r.events.size() >= 2, "events in run " + runs + ": " + r.events.size());
+            ctl.applyAndPrepareNext();
+            runs++;
+        }
+        assertEquals(SessionState.DONE, ctl.state(), String.join("\n", listener.log));
+        assertTrue(runs >= 2 && runs <= 10, "runs " + runs);
+        double[][] timing = port.readArray2D(SimEcuPort.CONFIG, b.alsTimingTable);
+        // rows = TPS bins, columns = RPM bins 2000..7000: the visited 4000 rpm column got more retard
+        assertTrue(timing[0][2] < -14, "4000 rpm timing " + timing[0][2]);
+        assertTrue(timing[0][2] >= -35, "4000 rpm timing " + timing[0][2]);
+        assertEquals(-8, timing[0][5], 1e-9); // 7000 rpm never visited
+        assertFalse(ctl.tables().isEmpty());
+        assertTrue(ctl.analysisText().length() > 0);
+        ctl.restoreOriginal();
+        assertEquals(-8, port.readArray2D(SimEcuPort.CONFIG, b.alsTimingTable)[0][2], 1e-9);
+        assertEquals(60, port.readScalar(SimEcuPort.CONFIG, b.alsAirStepsParam), 1e-9);
+        assertEquals("Always ON", port.readOption(SimEcuPort.CONFIG, b.alsEnableParam));
     }
 }

@@ -17,6 +17,8 @@ import io.github.xadmiral.boostautotune.plugin.ecu.EcuBinding;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuException;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuPort;
 import io.github.xadmiral.boostautotune.plugin.ecu.LiveFeed;
+import io.github.xadmiral.boostautotune.core.als.AlsConfig;
+import io.github.xadmiral.boostautotune.plugin.mode.AntilagDriver;
 import io.github.xadmiral.boostautotune.plugin.mode.BoostDriver;
 import io.github.xadmiral.boostautotune.plugin.mode.ModeDriver;
 import io.github.xadmiral.boostautotune.plugin.mode.SweepDriver;
@@ -202,6 +204,14 @@ public final class TuneController {
         synchronized (lock) {
             begin(binding);
             SweepDriver d = new SweepDriver(adapter, cfg);
+            install(d, d.startupLog());
+        }
+    }
+
+    public void startAntilagSession(AlsConfig cfg, EcuBinding binding) throws EcuException {
+        synchronized (lock) {
+            begin(binding);
+            AntilagDriver d = new AntilagDriver(adapter, cfg);
             install(d, d.startupLog());
         }
     }

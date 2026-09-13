@@ -36,7 +36,7 @@ public final class AutotunePanel extends JPanel {
     private final JLabel planLabel = new JLabel(" ");
     private final JTextArea instructions = new JTextArea(2, 60);
     private static final String[] LIVE_NAMES = {"RPM", "TPS %", "MAP kPa", "Boost tgt", "Boost duty", "CLT °C", "Gear",
-            "VVT angle", "VVT target", "Advance", "Knock rtd", "AFR", "Sample", "Pulls / peak"};
+            "VVT angle", "VVT target", "Advance", "Knock rtd", "AFR", "Sample", "Pulls / peak", "MAT °C", "Anti-lag"};
     private final JLabel[] live = new JLabel[LIVE_NAMES.length];
     private final JTextArea report = new JTextArea(14, 80);
     private final JButton startSession = new JButton("Start session");
@@ -51,6 +51,7 @@ public final class AutotunePanel extends JPanel {
     private final JButton simPull3 = new JButton("Simulate pull (3rd)");
     private final JButton simPull4 = new JButton("Simulate pull (4th)");
     private final JButton simDrive = new JButton("Simulate 60 s drive");
+    private final JButton simAls = new JButton("Simulate anti-lag (3 lifts)");
     private final JCheckBox autoEnd = new JCheckBox("Auto end run", true);
     private final JCheckBox autoApply = new JCheckBox("Auto apply & prepare next", false);
     private final Runnable beforeStart;
@@ -84,7 +85,7 @@ public final class AutotunePanel extends JPanel {
         instructions.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
         top.add(instructions);
 
-        JPanel liveRow = new JPanel(new GridLayout(2, 7, 8, 2));
+        JPanel liveRow = new JPanel(new GridLayout(2, 8, 8, 2));
         for (int i = 0; i < live.length; i++) {
             JPanel cell = new JPanel(new BorderLayout());
             JLabel n = new JLabel(LIVE_NAMES[i]);
@@ -114,6 +115,8 @@ public final class AutotunePanel extends JPanel {
         buttons.add(simPull3);
         buttons.add(simPull4);
         buttons.add(simDrive);
+        simAls.setVisible(demo);
+        buttons.add(simAls);
 
         report.setEditable(false);
         report.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -180,6 +183,11 @@ public final class AutotunePanel extends JPanel {
         simDrive.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 ((SimEcuPort) ctl.port()).simulateDrive(60, 8);
+            }
+        });
+        simAls.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                ((SimEcuPort) ctl.port()).simulateAntilag(3, 4);
             }
         });
         ctl.setAutoEndRun(autoEnd.isSelected());
@@ -254,9 +262,11 @@ public final class AutotunePanel extends JPanel {
         restore.setEnabled(ctl.hasOriginal());
         burn.setEnabled(ctl.adapter() != null);
         boolean vvtPid = ctl.mode() == TuneMode.VVT_PID;
-        simPull3.setEnabled(st == SessionState.RECORDING && !vvtPid);
-        simPull4.setEnabled(st == SessionState.RECORDING && !vvtPid);
+        boolean als = ctl.mode() == TuneMode.ANTILAG;
+        simPull3.setEnabled(st == SessionState.RECORDING && !vvtPid && !als);
+        simPull4.setEnabled(st == SessionState.RECORDING && !vvtPid && !als);
         simDrive.setEnabled(st == SessionState.RECORDING && vvtPid);
+        simAls.setEnabled(st == SessionState.RECORDING && als);
     }
 
     private void refreshLive() {
@@ -282,6 +292,10 @@ public final class AutotunePanel extends JPanel {
         live[12].setForeground(st == SampleState.STEADY ? new Color(0, 130, 0) : st == SampleState.OVERBOOST ? Color.RED : Color.DARK_GRAY);
         double peak = ctl.runPeak();
         live[13].setText(ctl.pullsInRun() + (Double.isNaN(peak) ? "" : String.format(Locale.US, " / %.0f", peak)));
+        live[14].setText(fmt(x.mat, "%.0f"));
+        live[14].setForeground(!Double.isNaN(x.mat) && x.mat >= 70 ? Color.RED : Color.BLACK);
+        live[15].setText(x.alsActive ? "ACTIVE" : "-");
+        live[15].setForeground(x.alsActive ? new Color(200, 90, 0) : Color.BLACK);
     }
 
     private static String fmt(double v, String f) {
