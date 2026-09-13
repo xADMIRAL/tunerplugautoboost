@@ -64,6 +64,29 @@ public final class EcuBinding {
     public String closedLoopExtraParam = "";
     public String closedLoopExtraOption = "";
 
+    // ---- VVT ----
+    public String vvtAngleChannel = "";
+    public String vvtTargetChannel = "";
+    public String fuelLoadChannel = "";
+    public String vvtTable = "";
+    public String vvtXBins = "";
+    public String vvtYBins = "";
+    public LoadSource vvtLoadSource = LoadSource.FUEL_LOAD;
+    public String vvtPidP = "";
+    public String vvtPidI = "";
+    public String vvtPidD = "";
+
+    // ---- ignition ----
+    public String advanceChannel = "";
+    public String knockChannel = "";
+    public String knockRetardChannel = "";
+    public String afrChannel = "";
+    public String ignLoadChannel = "";
+    public String sparkTable = "";
+    public String sparkXBins = "";
+    public String sparkYBins = "";
+    public LoadSource sparkLoadSource = LoadSource.IGN_LOAD;
+
     public TableOrientation orientation = TableOrientation.AUTO;
 
     public boolean has(String name) {
@@ -80,6 +103,60 @@ public final class EcuBinding {
 
     public boolean hasModeSwitch() {
         return has(modeParam) && has(openLoopOption) && has(closedLoopOption);
+    }
+
+    public boolean hasVvtTable() {
+        return has(vvtTable) && has(vvtXBins) && has(vvtYBins);
+    }
+
+    public boolean hasVvtPid() {
+        return has(vvtPidP) && has(vvtPidI);
+    }
+
+    public boolean hasSparkTable() {
+        return has(sparkTable) && has(sparkXBins) && has(sparkYBins);
+    }
+
+    /** Problems for the VVT modes (sweep needs the table, PID tuning needs the gains). */
+    public List<String> validateVvt(List<String> channels, List<String> params, boolean pid) {
+        List<String> problems = new ArrayList<String>();
+        checkChannel(problems, channels, "RPM channel", rpmChannel, true);
+        checkChannel(problems, channels, "TPS channel", tpsChannel, true);
+        checkChannel(problems, channels, "MAP channel", mapChannel, true);
+        checkChannel(problems, channels, "CLT channel", cltChannel, false);
+        checkChannel(problems, channels, "VVT angle channel", vvtAngleChannel, true);
+        checkChannel(problems, channels, "VVT target channel", vvtTargetChannel, true);
+        checkChannel(problems, channels, "Fuel load channel", fuelLoadChannel, false);
+        checkChannel(problems, channels, "Gear channel", gearChannel, false);
+        if (pid) {
+            checkParam(problems, params, "VVT P gain", vvtPidP, true);
+            checkParam(problems, params, "VVT I gain", vvtPidI, true);
+            checkParam(problems, params, "VVT D gain", vvtPidD, false);
+        } else {
+            checkParam(problems, params, "VVT table", vvtTable, true);
+            checkParam(problems, params, "VVT table RPM bins", vvtXBins, true);
+            checkParam(problems, params, "VVT table load bins", vvtYBins, true);
+        }
+        return problems;
+    }
+
+    /** Problems for the ignition sweep. */
+    public List<String> validateIgnition(List<String> channels, List<String> params) {
+        List<String> problems = new ArrayList<String>();
+        checkChannel(problems, channels, "RPM channel", rpmChannel, true);
+        checkChannel(problems, channels, "TPS channel", tpsChannel, true);
+        checkChannel(problems, channels, "MAP channel", mapChannel, true);
+        checkChannel(problems, channels, "CLT channel", cltChannel, false);
+        checkChannel(problems, channels, "Advance channel", advanceChannel, true);
+        checkChannel(problems, channels, "Knock retard channel", knockRetardChannel, true);
+        checkChannel(problems, channels, "Knock level channel", knockChannel, false);
+        checkChannel(problems, channels, "AFR channel", afrChannel, false);
+        checkChannel(problems, channels, "Ignition load channel", ignLoadChannel, false);
+        checkChannel(problems, channels, "Gear channel", gearChannel, false);
+        checkParam(problems, params, "Spark table", sparkTable, true);
+        checkParam(problems, params, "Spark table RPM bins", sparkXBins, true);
+        checkParam(problems, params, "Spark table load bins", sparkYBins, true);
+        return problems;
     }
 
     public EcuBinding copy() {
@@ -185,6 +262,25 @@ public final class EcuBinding {
         p.setProperty(prefix + "enableOption", enableOption);
         p.setProperty(prefix + "closedLoopExtraParam", closedLoopExtraParam);
         p.setProperty(prefix + "closedLoopExtraOption", closedLoopExtraOption);
+        p.setProperty(prefix + "vvtAngleChannel", vvtAngleChannel);
+        p.setProperty(prefix + "vvtTargetChannel", vvtTargetChannel);
+        p.setProperty(prefix + "fuelLoadChannel", fuelLoadChannel);
+        p.setProperty(prefix + "vvtTable", vvtTable);
+        p.setProperty(prefix + "vvtXBins", vvtXBins);
+        p.setProperty(prefix + "vvtYBins", vvtYBins);
+        p.setProperty(prefix + "vvtLoadSource", vvtLoadSource.name());
+        p.setProperty(prefix + "vvtPidP", vvtPidP);
+        p.setProperty(prefix + "vvtPidI", vvtPidI);
+        p.setProperty(prefix + "vvtPidD", vvtPidD);
+        p.setProperty(prefix + "advanceChannel", advanceChannel);
+        p.setProperty(prefix + "knockChannel", knockChannel);
+        p.setProperty(prefix + "knockRetardChannel", knockRetardChannel);
+        p.setProperty(prefix + "afrChannel", afrChannel);
+        p.setProperty(prefix + "ignLoadChannel", ignLoadChannel);
+        p.setProperty(prefix + "sparkTable", sparkTable);
+        p.setProperty(prefix + "sparkXBins", sparkXBins);
+        p.setProperty(prefix + "sparkYBins", sparkYBins);
+        p.setProperty(prefix + "sparkLoadSource", sparkLoadSource.name());
         p.setProperty(prefix + "orientation", orientation.name());
     }
 
@@ -226,6 +322,25 @@ public final class EcuBinding {
         enableOption = p.getProperty(prefix + "enableOption", enableOption);
         closedLoopExtraParam = p.getProperty(prefix + "closedLoopExtraParam", closedLoopExtraParam);
         closedLoopExtraOption = p.getProperty(prefix + "closedLoopExtraOption", closedLoopExtraOption);
+        vvtAngleChannel = p.getProperty(prefix + "vvtAngleChannel", vvtAngleChannel);
+        vvtTargetChannel = p.getProperty(prefix + "vvtTargetChannel", vvtTargetChannel);
+        fuelLoadChannel = p.getProperty(prefix + "fuelLoadChannel", fuelLoadChannel);
+        vvtTable = p.getProperty(prefix + "vvtTable", vvtTable);
+        vvtXBins = p.getProperty(prefix + "vvtXBins", vvtXBins);
+        vvtYBins = p.getProperty(prefix + "vvtYBins", vvtYBins);
+        vvtLoadSource = parseLoad(p.getProperty(prefix + "vvtLoadSource"), vvtLoadSource);
+        vvtPidP = p.getProperty(prefix + "vvtPidP", vvtPidP);
+        vvtPidI = p.getProperty(prefix + "vvtPidI", vvtPidI);
+        vvtPidD = p.getProperty(prefix + "vvtPidD", vvtPidD);
+        advanceChannel = p.getProperty(prefix + "advanceChannel", advanceChannel);
+        knockChannel = p.getProperty(prefix + "knockChannel", knockChannel);
+        knockRetardChannel = p.getProperty(prefix + "knockRetardChannel", knockRetardChannel);
+        afrChannel = p.getProperty(prefix + "afrChannel", afrChannel);
+        ignLoadChannel = p.getProperty(prefix + "ignLoadChannel", ignLoadChannel);
+        sparkTable = p.getProperty(prefix + "sparkTable", sparkTable);
+        sparkXBins = p.getProperty(prefix + "sparkXBins", sparkXBins);
+        sparkYBins = p.getProperty(prefix + "sparkYBins", sparkYBins);
+        sparkLoadSource = parseLoad(p.getProperty(prefix + "sparkLoadSource"), sparkLoadSource);
         try {
             orientation = TableOrientation.valueOf(p.getProperty(prefix + "orientation", orientation.name()));
         } catch (IllegalArgumentException e) {

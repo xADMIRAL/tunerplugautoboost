@@ -17,6 +17,21 @@ public final class Sample {
     public final boolean boostCut;
     /** True when the ECU reports its closed-loop controller as active; true when unknown. */
     public final boolean closedLoopActive;
+    // ---- channels used by the VVT and ignition modes (NaN when not bound) ----
+    /** Fuel load (kPa for speed density), the Y axis of the VVT table on MS3. */
+    public final double fuelLoad;
+    /** Ignition load, the Y axis of the spark table. */
+    public final double ignLoad;
+    public final double vvtAngle;
+    public final double vvtTarget;
+    /** Actual ignition advance, degrees BTDC. */
+    public final double advance;
+    /** Knock sensor level (firmware units, e.g. % on MS3). */
+    public final double knock;
+    /** Timing currently pulled by the ECU's knock control, degrees. */
+    public final double knockRetard;
+    public final double afr;
+    public final double afrTarget;
 
     private Sample(Builder b) {
         this.timeSec = b.timeSec;
@@ -29,6 +44,15 @@ public final class Sample {
         this.gear = b.gear;
         this.boostCut = b.boostCut;
         this.closedLoopActive = b.closedLoopActive;
+        this.fuelLoad = b.fuelLoad;
+        this.ignLoad = b.ignLoad;
+        this.vvtAngle = b.vvtAngle;
+        this.vvtTarget = b.vvtTarget;
+        this.advance = b.advance;
+        this.knock = b.knock;
+        this.knockRetard = b.knockRetard;
+        this.afr = b.afr;
+        this.afrTarget = b.afrTarget;
     }
 
     public static Builder builder() {
@@ -42,6 +66,8 @@ public final class Sample {
             case BOOST_TARGET: return target;
             case MAP: return map;
             case GEAR: return gear;
+            case FUEL_LOAD: return Double.isNaN(fuelLoad) ? map : fuelLoad;
+            case IGN_LOAD: return Double.isNaN(ignLoad) ? map : ignLoad;
             default: throw new IllegalArgumentException("Unknown load source " + source);
         }
     }
@@ -63,6 +89,15 @@ public final class Sample {
         private int gear;
         private boolean boostCut;
         private boolean closedLoopActive = true;
+        private double fuelLoad = Double.NaN;
+        private double ignLoad = Double.NaN;
+        private double vvtAngle = Double.NaN;
+        private double vvtTarget = Double.NaN;
+        private double advance = Double.NaN;
+        private double knock = Double.NaN;
+        private double knockRetard = Double.NaN;
+        private double afr = Double.NaN;
+        private double afrTarget = Double.NaN;
 
         public Builder time(double t) { this.timeSec = t; return this; }
         public Builder rpm(double v) { this.rpm = v; return this; }
@@ -74,6 +109,15 @@ public final class Sample {
         public Builder gear(int v) { this.gear = v; return this; }
         public Builder boostCut(boolean v) { this.boostCut = v; return this; }
         public Builder closedLoopActive(boolean v) { this.closedLoopActive = v; return this; }
+        public Builder fuelLoad(double v) { this.fuelLoad = v; return this; }
+        public Builder ignLoad(double v) { this.ignLoad = v; return this; }
+        public Builder vvtAngle(double v) { this.vvtAngle = v; return this; }
+        public Builder vvtTarget(double v) { this.vvtTarget = v; return this; }
+        public Builder advance(double v) { this.advance = v; return this; }
+        public Builder knock(double v) { this.knock = v; return this; }
+        public Builder knockRetard(double v) { this.knockRetard = v; return this; }
+        public Builder afr(double v) { this.afr = v; return this; }
+        public Builder afrTarget(double v) { this.afrTarget = v; return this; }
 
         public Sample build() {
             return new Sample(this);

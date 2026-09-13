@@ -22,6 +22,37 @@ public final class SimEcu {
     public double iScale = 0.02;
     public double dScale = 0.0006;
 
+    // ---- VVT: target table (rpm x fuel load), PID and a hydraulic phaser model ----
+    public Grid vvtTable;
+    public PidGains vvtPid = new PidGains(70, 15, 40);
+    public double vvtPScale = 0.00043;  // % duty per degree of error at P = 100 (times actuator gain)
+    public double vvtIScale = 0.0015;
+    public double vvtDScale = 0.00006;
+    public double camRatePerDuty = 4.0; // deg/s of cam movement per % of duty away from hold
+    public double camLagSec = 0.08;
+    /** Oil transport delay between the solenoid and the phaser: what makes too much P ring. */
+    public double camDeadTimeSec = 0.05;
+    public double camMax = 45;
+    private double camAngle;
+    private double camVel;
+    private double vvtIntegral;
+    private double vvtLastErr = Double.NaN;
+    private double vvtTarget;
+    private double vvtDuty = 50;
+    private double vvtClock;
+    private final java.util.ArrayDeque<double[]> dutyHistory = new java.util.ArrayDeque<double[]>();
+
+    // ---- ignition: spark table (rpm x ign load) and a safe-mode style knock control ----
+    public Grid sparkTable;
+    public TorqueModel torque = new TorqueModel();
+    public double knockRetardStep = 1.5;
+    public double knockMaxRetard = 6;
+    public double knockRecoverPerSec = 1.0;
+    private double knockRetard;
+    private double knockTimer;
+    private double advance;
+    private double knockLevel;
+
     public SimEcu(EcuState state) {
         apply(state);
     }
@@ -47,6 +78,106 @@ public final class SimEcu {
     public void resetController() {
         integral = 0;
         lastError = Double.NaN;
+    }
+
+    public double camAngle() {
+        return camAngle;
+    }
+
+    public double vvtTarget() {
+        return vvtTarget;
+    }
+
+    public double vvtDuty() {
+        return vvtDuty;
+    }
+
+    public double advance() {
+        return advance;
+    }
+
+    public double knockRetard() {
+        return knockRetard;
+    }
+
+    public double knockLevel() {
+        return knockLevel;
+    }
+
+    public void resetAuxiliaries() {
+        camAngle = 0;
+        camVel = 0;
+        vvtIntegral = 0;
+        vvtLastErr = Double.NaN;
+        dutyHistory.clear();
+        vvtClock = 0;
+        knockRetard = 0;
+        knockTimer = 0;
+        knockLevel = 0;
+    }
+
+    /** Advances the cam phaser model one control step. */
+    public void vvtStep(double rpm, double fuelLoad, double dt) {
+        if (vvtTable == null) {
+            return;
+        }
+        vvtTarget = vvtTable.lookup(rpm, fuelLoad);
+        double err = vvtTarget - camAngle;
+        vvtIntegral += err * dt;
+        double iTerm = vvtPid.i * vvtIScale * vvtIntegral;
+        double iLimit = 20;
+        if (iTerm > iLimit) { iTerm = iLimit; vvtIntegral = iLimit / Math.max(1e-6, vvtPid.i * vvtIScale); }
+        if (iTerm < -iLimit) { iTerm = -iLimit; vvtIntegral = -iLimit / Math.max(1e-6, vvtPid.i * vvtIScale); }
+        double dTerm = Double.isNaN(vvtLastErr) ? 0 : vvtPid.d * vvtDScale * (err - vvtLastErr) / dt;
+        vvtLastErr = err;
+        vvtDuty = Stats.clamp(50 + (vvtPid.p * vvtPScale * 100) * err + iTerm + dTerm, 0, 100);
+        vvtClock += dt;
+        dutyHistory.addLast(new double[]{vvtClock, vvtDuty});
+        double delayed = vvtDuty;
+        while (!dutyHistory.isEmpty() && dutyHistory.peekFirst()[0] <= vvtClock - camDeadTimeSec) {
+            delayed = dutyHistory.pollFirst()[1];
+        }
+        if (dutyHistory.size() > 0 && vvtClock < camDeadTimeSec) {
+            delayed = 50;
+        }
+        double velTarget = camRatePerDuty * (delayed - 50);
+        camVel += (velTarget - camVel) * (dt / camLagSec);
+        camAngle = Stats.clamp(camAngle + camVel * dt, 0, camMax);
+        if (camAngle <= 0 || camAngle >= camMax) {
+            camVel = 0;
+        }
+    }
+
+    /** Spark lookup plus a crude knock controller; returns the actual advance. */
+    public double sparkStep(double rpm, double ignLoad, double tps, double dt) {
+        if (sparkTable == null) {
+            return Double.NaN;
+        }
+        double commanded = sparkTable.lookup(rpm, ignLoad);
+        double limit = torque.knockLimit(rpm, ignLoad);
+        boolean knocking = tps >= 85 && commanded - knockRetard > limit;
+        knockLevel = knocking ? Stats.clamp(30 + (commanded - knockRetard - limit) * 20, 30, 100) : 5;
+        knockTimer += dt;
+        if (knocking && knockTimer >= 0.2) {
+            knockRetard = Math.min(knockMaxRetard, knockRetard + knockRetardStep);
+            knockTimer = 0;
+        } else if (!knocking && knockRetard > 0) {
+            knockRetard = Math.max(0, knockRetard - knockRecoverPerSec * dt);
+        }
+        advance = commanded - knockRetard;
+        return advance;
+    }
+
+    /** Multiplier applied to the engine's acceleration from cam and spark. */
+    public double torqueFactor(double rpm, double load) {
+        double f = 1;
+        if (vvtTable != null) {
+            f *= torque.camFactor(rpm, camAngle);
+        }
+        if (sparkTable != null) {
+            f *= torque.sparkFactor(rpm, load, advance);
+        }
+        return f;
     }
 
     /** One control step; returns the duty. */

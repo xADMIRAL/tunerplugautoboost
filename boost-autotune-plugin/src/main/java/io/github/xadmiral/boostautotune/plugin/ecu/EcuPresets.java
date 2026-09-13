@@ -59,6 +59,25 @@ public final class EcuPresets {
             b.enableOption = "On";
             b.closedLoopExtraParam = "boost_ctl_flags";
             b.closedLoopExtraOption = "Advanced Mode";
+            b.vvtAngleChannel = "vvt_ang1";
+            b.vvtTargetChannel = "vvt_target1";
+            b.fuelLoadChannel = "fuelload";
+            b.vvtTable = "vvt_timing1";
+            b.vvtXBins = "vvt_timing_rpm";
+            b.vvtYBins = "vvt_timing_load";
+            b.vvtLoadSource = LoadSource.FUEL_LOAD;
+            b.vvtPidP = "vvt_ctl_Kp";
+            b.vvtPidI = "vvt_ctl_Ki";
+            b.vvtPidD = "vvt_ctl_Kd";
+            b.advanceChannel = "advance";
+            b.knockChannel = "knock";
+            b.knockRetardChannel = "knockRetard";
+            b.afrChannel = "afr1";
+            b.ignLoadChannel = "ignload";
+            b.sparkTable = "advanceTable1";
+            b.sparkXBins = "srpm_table1";
+            b.sparkYBins = "smap_table1";
+            b.sparkLoadSource = LoadSource.IGN_LOAD;
         } else if (SPEEDUINO.equals(name)) {
             b.rpmChannel = "rpm";
             b.tpsChannel = "tps";
@@ -92,6 +111,22 @@ public final class EcuPresets {
             b.closedLoopOption = "Closed Loop";
             b.enableParam = "boostEnabled";
             b.enableOption = "On";
+            b.advanceChannel = "advance";
+            b.knockRetardChannel = "";
+            b.afrChannel = "afr";
+            b.sparkTable = "advTable1";
+            b.sparkXBins = "rpmBins2";
+            b.sparkYBins = "mapBins2";
+            b.sparkLoadSource = LoadSource.MAP;
+            b.vvtAngleChannel = "vvt1Angle";
+            b.vvtTargetChannel = "vvt1Target";
+            b.vvtTable = "vvtTable";
+            b.vvtXBins = "rpmBinsVVT";
+            b.vvtYBins = "loadBinsVVT";
+            b.vvtLoadSource = LoadSource.MAP;
+            b.vvtPidP = "vvtCLKP";
+            b.vvtPidI = "vvtCLKI";
+            b.vvtPidD = "vvtCLKD";
         } else if (RUSEFI.equals(name)) {
             b.rpmChannel = "RPMValue";
             b.tpsChannel = "TPSValue";
@@ -124,6 +159,22 @@ public final class EcuPresets {
             b.closedLoopOption = "Open + Closed Loop";
             b.enableParam = "isBoostControlEnabled";
             b.enableOption = "enabled";
+            b.advanceChannel = "ignitionAdvance";
+            b.knockRetardChannel = "knockRetard";
+            b.afrChannel = "AFRValue";
+            b.sparkTable = "ignitionTable";
+            b.sparkXBins = "ignitionRpmBins";
+            b.sparkYBins = "ignitionLoadBins";
+            b.sparkLoadSource = LoadSource.MAP;
+            b.vvtAngleChannel = "vvtPositionB1I";
+            b.vvtTargetChannel = "vvtTargetB1I";
+            b.vvtTable = "vvtTable1";
+            b.vvtXBins = "vvtTable1RpmBins";
+            b.vvtYBins = "vvtTable1LoadBins";
+            b.vvtLoadSource = LoadSource.MAP;
+            b.vvtPidP = "auxPid1_pFactor";
+            b.vvtPidI = "auxPid1_iFactor";
+            b.vvtPidD = "auxPid1_dFactor";
         }
         return b;
     }

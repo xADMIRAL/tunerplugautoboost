@@ -22,13 +22,13 @@ class ControllerDemoIntegrationTest {
 
     private static final class Collector implements TuneController.Listener {
         final List<String> log = new ArrayList<String>();
-        volatile RunReport last;
+        volatile Object last;
         int samples;
 
         public void log(String line) { log.add(line); }
         public void stateChanged() { }
         public void sample(Sample s, SampleState state) { samples++; }
-        public void reportReady(RunReport report) { last = report; }
+        public void reportReady(Object report) { last = report; }
     }
 
     private static void waitForPull(SimEcuPort port) throws InterruptedException {
@@ -58,7 +58,8 @@ class ControllerDemoIntegrationTest {
         EcuBinding binding = EcuPresets.create(EcuPresets.STEALTH_PCM);
         binding.timeChannel = "seconds";
 
-        RunPlan plan = ctl.startSession(cfg, binding);
+        ctl.startSession(cfg, binding);
+        RunPlan plan = ctl.session().plan();
         assertNotNull(plan);
         assertEquals(SessionState.READY, ctl.state());
         assertNotNull(ctl.original());
@@ -78,7 +79,7 @@ class ControllerDemoIntegrationTest {
             port.simulatePull(4, 1000);
             waitForPull(port);
             assertNotEquals(SessionState.ABORTED, ctl.state(), "aborted: " + ctl.session().abortReason());
-            RunReport r = ctl.endRun();
+            RunReport r = (RunReport) ctl.endRun();
             assertSame(r, listener.last);
             assertTrue(r.pulls.size() >= 1, "no pulls recorded: " + r.summary());
             ctl.applyAndPrepareNext();
@@ -129,7 +130,7 @@ class ControllerDemoIntegrationTest {
         assertEquals(0, ol[7][7], 1e-9);
         boolean logged = false;
         for (String l : listener.log) {
-            if (l.contains("OVERBOOST")) {
+            if (l.toLowerCase().contains("overboost")) {
                 logged = true;
             }
         }

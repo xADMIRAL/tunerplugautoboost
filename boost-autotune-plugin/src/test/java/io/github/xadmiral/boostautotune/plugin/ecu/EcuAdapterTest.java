@@ -37,6 +37,34 @@ class EcuAdapterTest {
     }
 
     @Test
+    void vvtAndSparkRoundTrip() throws Exception {
+        SimEcuPort port = new SimEcuPort();
+        EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
+        EcuAdapter a = new EcuAdapter(port, b);
+        Grid vvt = a.readVvtTable();
+        assertEquals(8, vvt.width());
+        assertEquals(45, vvt.get(1, 4), 1e-9); // 1000 rpm / 150 kPa in the base tune
+        Grid v2 = vvt.copy();
+        v2.set(3, 5, 33);
+        a.writeVvtTable(v2);
+        assertEquals(33, port.readArray2D(SimEcuPort.CONFIG, b.vvtTable)[5][3], 1e-9);
+        assertEquals(70, a.readVvtGains().p, 1e-9);
+        a.writeVvtGains(new io.github.xadmiral.boostautotune.core.model.PidGains(60, 10, 30));
+        assertEquals(60, port.readScalar(SimEcuPort.CONFIG, b.vvtPidP), 1e-9);
+        Grid spark = a.readSparkTable();
+        assertEquals(16, spark.width());
+        assertEquals(16, spark.height());
+        assertEquals(500, spark.xAxis().min(), 1e-9);
+        assertEquals(280, spark.yAxis().max(), 1e-9);
+        Grid s2 = spark.copy();
+        s2.set(8, 9, 12.5);
+        a.writeSparkTable(s2);
+        assertEquals(12.5, port.readArray2D(SimEcuPort.CONFIG, b.sparkTable)[9][8], 1e-9);
+        assertTrue(b.validateVvt(port.channelNames(SimEcuPort.CONFIG), port.parameterNames(SimEcuPort.CONFIG), true).isEmpty());
+        assertTrue(b.validateIgnition(port.channelNames(SimEcuPort.CONFIG), port.parameterNames(SimEcuPort.CONFIG)).isEmpty());
+    }
+
+    @Test
     void transposedLayoutIsHonoured() {
         TableLayout l = new TableLayout(3, 2, false); // raw rows = X (3), cols = Y (2)
         double[][] raw = {{1, 2}, {3, 4}, {5, 6}};

@@ -3,11 +3,14 @@ package io.github.xadmiral.boostautotune.plugin.ui;
 import io.github.xadmiral.boostautotune.core.config.AutotuneConfig;
 import io.github.xadmiral.boostautotune.core.learn.SampleState;
 import io.github.xadmiral.boostautotune.core.model.Sample;
-import io.github.xadmiral.boostautotune.core.session.RunReport;
+import io.github.xadmiral.boostautotune.core.sweep.SweepConfig;
+import io.github.xadmiral.boostautotune.core.vvt.VvtPidConfig;
 import io.github.xadmiral.boostautotune.plugin.TuneController;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuBinding;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuPort;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuPresets;
+import io.github.xadmiral.boostautotune.plugin.ecu.SimEcuPort;
+import io.github.xadmiral.boostautotune.plugin.mode.TuneMode;
 import io.github.xadmiral.boostautotune.plugin.settings.SettingsStore;
 
 import javax.swing.JOptionPane;
@@ -22,11 +25,16 @@ import java.util.Properties;
 /** Root component of the plugin: tabs plus the wiring between them and the controller. */
 public final class MainPanel extends JPanel implements TuneController.Listener {
     private final AutotuneConfig cfg = new AutotuneConfig();
+    private final SweepConfig vvtSweep = SweepConfig.vvtDefaults();
+    private final SweepConfig ignSweep = SweepConfig.ignitionDefaults();
+    private final VvtPidConfig vvtPid = new VvtPidConfig();
     private final EcuBinding binding;
     private final SettingsStore store;
     private final TuneController ctl;
     private final SetupPanel setup;
     private final TargetsPanel targets;
+    private final VvtPanel vvtPanel;
+    private final IgnitionPanel ignitionPanel;
     private final AutotunePanel autotune;
     private final AnalysisPanel analysis;
     private final LogPanel logPanel = new LogPanel();
@@ -38,7 +46,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
         if (store != null && store.exists()) {
             try {
-                store.load(cfg, b, new Properties());
+                store.load(cfg, vvtSweep, ignSweep, vvtPid, b, new Properties());
             } catch (IOException e) {
                 b = EcuPresets.create(EcuPresets.STEALTH_PCM);
             }
@@ -49,7 +57,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
                 b = EcuPresets.create(guess);
             }
         }
-        if (port instanceof io.github.xadmiral.boostautotune.plugin.ecu.SimEcuPort) {
+        if (port instanceof SimEcuPort) {
             b.timeChannel = "seconds";
         }
         this.binding = b;
@@ -62,6 +70,8 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         };
         setup = new SetupPanel(binding, port, save);
         targets = new TargetsPanel(cfg, binding, port, save);
+        vvtPanel = new VvtPanel(vvtSweep, vvtPid, save);
+        ignitionPanel = new IgnitionPanel(ignSweep, save);
         autotune = new AutotunePanel(ctl, new Runnable() {
             public void run() {
                 startSession();
@@ -69,7 +79,9 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         });
         analysis = new AnalysisPanel(ctl);
         tabs.addTab("Autotune", autotune);
-        tabs.addTab("Targets", targets);
+        tabs.addTab("Boost", targets);
+        tabs.addTab("VVT", vvtPanel);
+        tabs.addTab("Ignition", ignitionPanel);
         tabs.addTab("Setup", setup);
         tabs.addTab("Analysis", analysis);
         tabs.addTab("Log", logPanel);
@@ -84,6 +96,18 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         return cfg;
     }
 
+    public SweepConfig vvtSweepConfig() {
+        return vvtSweep;
+    }
+
+    public SweepConfig ignitionSweepConfig() {
+        return ignSweep;
+    }
+
+    public VvtPidConfig vvtPidConfig() {
+        return vvtPid;
+    }
+
     public EcuBinding binding() {
         return binding;
     }
@@ -92,43 +116,99 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         return ctl;
     }
 
+    public AutotunePanel autotunePanel() {
+        return autotune;
+    }
+
     private void saveSettings() {
         if (store == null) {
             return;
         }
         try {
-            store.save(cfg, binding, new Properties());
+            store.save(cfg, vvtSweep, ignSweep, vvtPid, binding, new Properties());
         } catch (IOException e) {
             logPanel.append("Could not save settings: " + e.getMessage());
         }
     }
 
     private void startSession() {
-        if (!targets.apply()) {
-            tabs.setSelectedComponent(targets);
-            JOptionPane.showMessageDialog(this, "Fix the Targets settings first.", "Boost Autotune", JOptionPane.WARNING_MESSAGE);
+        TuneMode mode = autotune.selectedMode();
+        JPanel settingsTab;
+        boolean ok;
+        switch (mode) {
+            case VVT_PID:
+            case VVT_SWEEP:
+                settingsTab = vvtPanel;
+                ok = vvtPanel.apply();
+                break;
+            case IGNITION_SWEEP:
+                settingsTab = ignitionPanel;
+                ok = ignitionPanel.apply();
+                break;
+            default:
+                settingsTab = targets;
+                ok = targets.apply();
+        }
+        if (!ok) {
+            tabs.setSelectedComponent(settingsTab);
+            JOptionPane.showMessageDialog(this, "Fix the settings of this mode first.", "Boost Autotune", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        List<String> problems = setup.validateBinding();
+        List<String> problems = setup.validateFor(mode);
         if (!problems.isEmpty()) {
             tabs.setSelectedComponent(setup);
             JOptionPane.showMessageDialog(this, "Fix the ECU binding first:\n" + problems.get(0), "Boost Autotune",
                     JOptionPane.WARNING_MESSAGE);
             return;
         }
-        int r = JOptionPane.showConfirmDialog(this,
-                "Start a boost autotune session?\n\n"
+        String text;
+        switch (mode) {
+            case VVT_PID:
+                text = "Start a VVT PID session?\n\nThe plugin will write VVT gains to the ECU between runs; a copy is kept for 'Restore original'.";
+                break;
+            case VVT_SWEEP:
+                text = "Start a VVT target sweep?\n\nCandidates " + vvtSweep.candidateOffsets + " deg on rows with load >= " + vvtSweep.minLoad
+                        + ".\nThe plugin writes the VVT table between runs; a copy is kept for 'Restore original'.";
+                break;
+            case IGNITION_SWEEP:
+                if (!ignitionPanel.acknowledged()) {
+                    tabs.setSelectedComponent(ignitionPanel);
+                    JOptionPane.showMessageDialog(this, "Tick the acknowledgement on the Ignition tab first.", "Boost Autotune",
+                            JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                text = "START AN IGNITION ADVANCE SWEEP?\n\nCandidates " + ignSweep.candidateOffsets + " deg on rows with load >= " + ignSweep.minLoad
+                        + " kPa, never more than +" + ignSweep.maxAdvanceOverOriginalDeg + " deg over the original table.\n"
+                        + "Knock retard >= " + ignSweep.knockRetardTriggerDeg + " deg caps a cell, >= " + ignSweep.knockAbortRetardDeg
+                        + " deg aborts and restores the original table.\n"
+                        + "The ECU's own knock control must be enabled and a wideband must be connected.";
+                break;
+            default:
+                text = "Start a boost autotune session?\n\n"
                         + "Targets: " + cfg.targetStagesKpa + " kPa, hard limit " + cfg.maxBoostKpa + " kPa.\n"
                         + "The plugin will write boost tables and gains to the ECU between runs.\n"
                         + "A copy of the current boost settings is kept for 'Restore original'.\n"
-                        + "Keep a hand on the throttle: lift if boost runs away.",
-                "Boost Autotune", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+                        + "Keep a hand on the throttle: lift if boost runs away.";
+        }
+        int r = JOptionPane.showConfirmDialog(this, text, "Boost Autotune", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
         if (r != JOptionPane.OK_OPTION) {
             return;
         }
         try {
-            ctl.startSession(cfg, binding);
-            analysis.showPlanOnly();
+            switch (mode) {
+                case VVT_PID:
+                    ctl.startVvtPidSession(vvtPid, binding);
+                    break;
+                case VVT_SWEEP:
+                    ctl.startSweepSession(vvtSweep, binding);
+                    break;
+                case IGNITION_SWEEP:
+                    ctl.startSweepSession(ignSweep, binding);
+                    break;
+                default:
+                    ctl.startSession(cfg, binding);
+            }
+            analysis.refresh();
             tabs.setSelectedComponent(autotune);
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Boost Autotune", JOptionPane.ERROR_MESSAGE);
@@ -164,11 +244,11 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
     }
 
     @Override
-    public void reportReady(final RunReport report) {
+    public void reportReady(Object report) {
         onEdt(new Runnable() {
             public void run() {
-                autotune.showReport(report);
-                analysis.showReport(report);
+                autotune.showReport();
+                analysis.refresh();
                 autotune.updateState();
             }
         });

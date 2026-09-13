@@ -33,7 +33,8 @@ public final class LiveFeed implements EcuPort.ChannelListener {
     public List<String> channels() {
         List<String> out = new ArrayList<String>();
         for (String c : new String[]{b.rpmChannel, b.tpsChannel, b.mapChannel, b.targetChannel, b.dutyChannel,
-                b.cltChannel, b.gearChannel, b.boostCutChannel, b.timeChannel}) {
+                b.cltChannel, b.gearChannel, b.boostCutChannel, b.timeChannel, b.vvtAngleChannel, b.vvtTargetChannel,
+                b.fuelLoadChannel, b.advanceChannel, b.knockChannel, b.knockRetardChannel, b.afrChannel, b.ignLoadChannel}) {
             if (b.has(c) && !out.contains(c)) {
                 out.add(c);
             }
@@ -79,7 +80,19 @@ public final class LiveFeed implements EcuPort.ChannelListener {
                 .clt(clt)
                 .gear(b.has(b.gearChannel) ? (int) Math.round(get(b.gearChannel, 0)) : 0)
                 .boostCut(cut)
+                .vvtAngle(optional(b.vvtAngleChannel))
+                .vvtTarget(optional(b.vvtTargetChannel))
+                .fuelLoad(optional(b.fuelLoadChannel))
+                .ignLoad(optional(b.ignLoadChannel))
+                .advance(optional(b.advanceChannel))
+                .knock(optional(b.knockChannel))
+                .knockRetard(optional(b.knockRetardChannel))
+                .afr(optional(b.afrChannel))
                 .build();
+    }
+
+    private double optional(String ch) {
+        return b.has(ch) ? get(ch, Double.NaN) : Double.NaN;
     }
 
     private double get(String ch, double def) {

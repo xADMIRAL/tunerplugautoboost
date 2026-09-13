@@ -51,8 +51,44 @@ public final class SimEcuPort implements EcuPort {
         options.put(b.modeParam, "Open-loop");
         options.put(b.enableParam, "Off");
         options.put(b.closedLoopExtraParam, "Basic Mode");
+        // VVT: the JZX110 base tune's intake table and gains
+        double[][] vvt = {
+                {0, 0, 0, 0, 0, 0, 0, 0},
+                {0, 0, 0, 0, 0, 0, 0, 0},
+                {0, 10, 10, 5, 5, 0, 0, 0},
+                {0, 32.5, 30, 30, 15, 5, 0, 0},
+                {0, 45, 40, 30, 15, 5, 0, 0},
+                {0, 45, 40, 30, 15, 5, 0, 0},
+                {0, 45, 40, 25, 15, 5, 0, 0},
+                {0, 45, 40, 20, 15, 5, 0, 0}};
+        arrays.put(b.vvtTable, vvt);
+        arrays.put(b.vvtXBins, column(500, 1000, 2000, 3000, 4000, 5000, 6000, 7000));
+        arrays.put(b.vvtYBins, column(40, 60, 100, 120, 150, 180, 200, 220));
+        scalars.put(b.vvtPidP, 70.0);
+        scalars.put(b.vvtPidI, 15.0);
+        scalars.put(b.vvtPidD, 40.0);
+        // spark: 16x16 on the base tune's axes, a few degrees below the simulator's MBT
+        double[] srpm = {500, 700, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6500, 7000, 8000, 9000};
+        double[] sload = {20, 30, 40, 50, 60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280};
         ecu = new SimEcu(toState());
+        double[][] spark = new double[16][16];
+        for (int yi = 0; yi < 16; yi++) {
+            for (int xi = 0; xi < 16; xi++) {
+                spark[yi][xi] = Math.round((ecu.torque.mbt(srpm[xi], sload[yi]) - 6) * 10) / 10.0;
+            }
+        }
+        arrays.put(b.sparkTable, spark);
+        arrays.put(b.sparkXBins, column(srpm));
+        arrays.put(b.sparkYBins, column(sload));
+        applyAuxiliaries();
         sim = new PullSimulator(plant, ecu);
+    }
+
+    private void applyAuxiliaries() {
+        EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
+        ecu.vvtTable = grid(b.vvtTable, b.vvtXBins, b.vvtYBins);
+        ecu.vvtPid = new PidGains(scalars.get(b.vvtPidP), scalars.get(b.vvtPidI), scalars.get(b.vvtPidD));
+        ecu.sparkTable = grid(b.sparkTable, b.sparkXBins, b.sparkYBins);
     }
 
     private EcuState toState() {
@@ -118,15 +154,17 @@ public final class SimEcuPort implements EcuPort {
 
     @Override
     public List<String> channelNames(String config) {
-        return Arrays.asList("rpm", "tps", "map", "boost_targ_1", "boostduty", "coolant", "gear", "status2", "seconds");
+        return Arrays.asList("rpm", "tps", "map", "boost_targ_1", "boostduty", "coolant", "gear", "status2", "seconds",
+                "vvt_ang1", "vvt_target1", "fuelload", "ignload", "advance", "knock", "knockRetard", "afr1");
     }
 
     @Override
     public ParamInfo parameterInfo(String config, String name) throws EcuException {
         if (arrays.containsKey(name)) {
             double[][] a = arrays.get(name);
-            return new ParamInfo("array", "", 0, name.contains("targets") ? 400 : 100, 0, a[0].length, a.length,
-                    Collections.<String>emptyList());
+            double min = name.startsWith("advance") ? -45 : 0;
+            double max = name.contains("targets") ? 400 : name.startsWith("advance") ? 90 : name.startsWith("vvt_timing1") ? 720 : 100;
+            return new ParamInfo("array", "", min, max, 1, a[0].length, a.length, Collections.<String>emptyList());
         }
         if (scalars.containsKey(name)) {
             return new ParamInfo("scalar", "%", 0, name.contains("Kp") || name.contains("Ki") || name.contains("Kd") ? 200 : 100,
@@ -185,6 +223,7 @@ public final class SimEcuPort implements EcuPort {
         }
         scalars.put(name, value);
         ecu.apply(toState());
+        applyAuxiliaries();
     }
 
     @Override
@@ -207,6 +246,7 @@ public final class SimEcuPort implements EcuPort {
         }
         arrays.put(name, c);
         ecu.apply(toState());
+        applyAuxiliaries();
     }
 
     @Override
@@ -236,7 +276,9 @@ public final class SimEcuPort implements EcuPort {
         return Arrays.asList(
                 new UiTableInfo("Boost Control Targets 1", b.targetXBins, b.targetYBins, b.targetTable, "rpm", "throttle"),
                 new UiTableInfo("Boost Control Bias Duty 1", b.biasXBins, b.biasYBins, b.biasTable, "rpm", "boost_targ_1"),
-                new UiTableInfo("Boost Control Duty 1", b.openLoopXBins, b.openLoopYBins, b.openLoopTable, "rpm", "throttle"));
+                new UiTableInfo("Boost Control Duty 1", b.openLoopXBins, b.openLoopYBins, b.openLoopTable, "rpm", "throttle"),
+                new UiTableInfo("VVT Intake (Relative Timing)", b.vvtXBins, b.vvtYBins, b.vvtTable, "rpm", "vvt_load"),
+                new UiTableInfo("Ignition Table 1 (Spark Advance)", b.sparkXBins, b.sparkYBins, b.sparkTable, "rpm", "ignload"));
     }
 
     public boolean isPulling() {
@@ -249,6 +291,15 @@ public final class SimEcuPort implements EcuPort {
      * @param speedFactor 1 = real time, 10 = ten times faster
      */
     public void simulatePull(final int gear, final double speedFactor) {
+        stream(gear, speedFactor, false, 0);
+    }
+
+    /** Streams ordinary driving (for the VVT PID mode). */
+    public void simulateDrive(final double seconds, final double speedFactor) {
+        stream(3, speedFactor, true, seconds);
+    }
+
+    private void stream(final int gear, final double speedFactor, final boolean drive, final double seconds) {
         if (pulling) {
             return;
         }
@@ -258,7 +309,9 @@ public final class SimEcuPort implements EcuPort {
             public void run() {
                 try {
                     ecu.apply(toState());
-                    List<Sample> samples = sim.pull(gear);
+                    applyAuxiliaries();
+                    ecu.resetAuxiliaries();
+                    List<Sample> samples = drive ? sim.drive(seconds) : sim.pull(gear);
                     double last = Double.NaN;
                     for (Sample s : samples) {
                         if (!Double.isNaN(last)) {
@@ -276,6 +329,14 @@ public final class SimEcuPort implements EcuPort {
                         emit("boost_targ_1", Double.isNaN(s.target) ? 0 : s.target);
                         emit("status2", 0);
                         emit("seconds", s.timeSec);
+                        emit("fuelload", s.fuelLoad);
+                        emit("ignload", s.ignLoad);
+                        emit("vvt_ang1", s.vvtAngle);
+                        emit("vvt_target1", s.vvtTarget);
+                        emit("advance", s.advance);
+                        emit("knock", s.knock);
+                        emit("knockRetard", s.knockRetard);
+                        emit("afr1", s.afr);
                         emit("map", s.map); // trigger channel last
                     }
                     sim.setTime(sim.time() + 3);

@@ -23,6 +23,21 @@ names preset. Best-effort presets exist for stock MS3 1.5+, Speeduino and rusEFI
    trimming of unreachable targets. A stage converges after two consecutive good runs.
    The simulator test converges 150 → 170 kPa in 9 runs.
 
+## VVT and ignition modes
+
+* **VVT PID (normal driving):** a run is a minute or two of varied driving; the cam angle is
+  compared with its target (steady accuracy, ringing, cross-correlation lag) and the gains are
+  moved in relative steps until two good runs in a row.
+* **VVT target sweep (pulls):** offsets (`0, -10, -5, +5, +10` deg) are applied to the WOT rows
+  of the cam table one run at a time; engine acceleration (dRPM/dt per RPM bin, same gear, same
+  road) picks the best cam timing per bin; the result is smoothed and written back.
+* **Ignition advance sweep with knock guard (pulls):** offsets (`0, -2, +2, +4` deg, two passes)
+  on the WOT rows of the spark table, decided by the MBT rule (least advance within 0.5 % of the
+  best torque). Any ECU knock retard caps the cell below the advance that knocked; heavy knock
+  (>= 3 deg retard) or a lean WOT mixture aborts and restores the original table; no cell is ever
+  advanced more than +4 deg over its original value. Not a dyno; needs working knock control and a
+  wideband.
+
 ## Install
 
 Copy `BoostAutotune.jar` to `~/.efianalytics/TunerStudio/plugins/` (Windows:

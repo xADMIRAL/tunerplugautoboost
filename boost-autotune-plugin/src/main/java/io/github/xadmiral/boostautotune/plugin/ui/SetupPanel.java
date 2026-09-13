@@ -82,6 +82,25 @@ public final class SetupPanel extends JPanel {
             new Row("closedLoopOption", "  ... closed-loop option text", "text"),
             new Row("closedLoopExtraParam", "Extra parameter set when closing the loop", "param"),
             new Row("closedLoopExtraOption", "  ... its option text", "text"),
+            new Row("fuelLoadChannel", "Fuel load channel (VVT table Y axis)", "channel"),
+            new Row("vvtAngleChannel", "VVT cam angle channel", "channel"),
+            new Row("vvtTargetChannel", "VVT target channel", "channel"),
+            new Row("vvtTable", "VVT target table (Z)", "param"),
+            new Row("vvtXBins", "VVT table RPM bins (X)", "param"),
+            new Row("vvtYBins", "VVT table load bins (Y)", "param"),
+            new Row("vvtLoadSource", "VVT table Y axis source", "load"),
+            new Row("vvtPidP", "VVT P gain", "param"),
+            new Row("vvtPidI", "VVT I gain", "param"),
+            new Row("vvtPidD", "VVT D gain", "param"),
+            new Row("ignLoadChannel", "Ignition load channel (spark table Y axis)", "channel"),
+            new Row("advanceChannel", "Ignition advance channel", "channel"),
+            new Row("knockRetardChannel", "Knock retard channel (deg)", "channel"),
+            new Row("knockChannel", "Knock level channel (optional)", "channel"),
+            new Row("afrChannel", "AFR channel (optional guard)", "channel"),
+            new Row("sparkTable", "Spark advance table (Z)", "param"),
+            new Row("sparkXBins", "Spark table RPM bins (X)", "param"),
+            new Row("sparkYBins", "Spark table load bins (Y)", "param"),
+            new Row("sparkLoadSource", "Spark table Y axis source", "load"),
             new Row("orientation", "Table orientation", "orient"),
     };
 
@@ -261,6 +280,14 @@ public final class SetupPanel extends JPanel {
                 binding.openLoopXBins = t.xParam;
                 binding.openLoopYBins = t.yParam;
                 refined++;
+            } else if (t.zParam.equals(binding.vvtTable)) {
+                binding.vvtXBins = t.xParam;
+                binding.vvtYBins = t.yParam;
+                refined++;
+            } else if (t.zParam.equals(binding.sparkTable)) {
+                binding.sparkXBins = t.xParam;
+                binding.sparkYBins = t.yParam;
+                refined++;
             }
         }
         // fuzzy fallbacks for channels that differ between INI versions
@@ -279,9 +306,10 @@ public final class SetupPanel extends JPanel {
             sb.append(refined).append(" table axis bindings taken from the INI table definitions\n");
         }
         if (!tables.isEmpty()) {
-            sb.append("Boost-related tables in this INI:\n");
+            sb.append("Boost / VVT / spark tables in this INI:\n");
             for (EcuPort.UiTableInfo t : tables) {
-                if (t.toString().toLowerCase().contains("boost")) {
+                String l = t.toString().toLowerCase();
+                if (l.contains("boost") || l.contains("vvt") || l.contains("spark") || l.contains("ignition") || l.contains("adv")) {
                     sb.append("  ").append(t).append('\n');
                 }
             }
@@ -292,11 +320,31 @@ public final class SetupPanel extends JPanel {
     }
 
     public List<String> validateBinding() {
+        return validateFor(io.github.xadmiral.boostautotune.plugin.mode.TuneMode.BOOST);
+    }
+
+    /** Validates the part of the binding a mode needs and shows the result. */
+    public List<String> validateFor(io.github.xadmiral.boostautotune.plugin.mode.TuneMode mode) {
         commit();
-        List<String> problems = binding.validate(port == null ? null : channels, port == null ? null : params);
+        List<String> ch = port == null ? null : channels;
+        List<String> pa = port == null ? null : params;
+        List<String> problems;
+        switch (mode) {
+            case VVT_PID:
+                problems = binding.validateVvt(ch, pa, true);
+                break;
+            case VVT_SWEEP:
+                problems = binding.validateVvt(ch, pa, false);
+                break;
+            case IGNITION_SWEEP:
+                problems = binding.validateIgnition(ch, pa);
+                break;
+            default:
+                problems = binding.validate(ch, pa);
+        }
         StringBuilder sb = new StringBuilder();
         if (problems.isEmpty()) {
-            sb.append("Binding OK.\n");
+            sb.append("Binding OK for ").append(mode.label()).append(".\n");
             if (!binding.hasBiasTable()) {
                 sb.append("No bias table: only PID gains and targets will be tuned.\n");
             }

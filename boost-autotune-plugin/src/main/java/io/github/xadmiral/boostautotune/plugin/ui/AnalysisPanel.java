@@ -3,14 +3,12 @@ package io.github.xadmiral.boostautotune.plugin.ui;
 import io.github.xadmiral.boostautotune.core.learn.BiasBuildResult;
 import io.github.xadmiral.boostautotune.core.learn.DutyEstimate;
 import io.github.xadmiral.boostautotune.core.log.LogColumnMapping;
-import io.github.xadmiral.boostautotune.core.session.AutotuneSession;
-import io.github.xadmiral.boostautotune.core.session.RunReport;
 import io.github.xadmiral.boostautotune.plugin.TuneController;
+import io.github.xadmiral.boostautotune.plugin.mode.TableView;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
-import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -30,31 +28,18 @@ import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
+import java.util.List;
 
-/** Tables and figures produced by the last run, plus offline datalog analysis. */
+/** Tables and figures produced by the last run of any mode, plus offline datalog analysis. */
 public final class AnalysisPanel extends JPanel {
     private final TuneController ctl;
-    private final GridTableModel biasModel = new GridTableModel();
-    private final GridTableModel targetModel = new GridTableModel();
+    private final JPanel tables = new JPanel(new GridLayout(1, 1, 6, 6));
     private final JTextArea details = new JTextArea(12, 80);
-    private RunReport current;
 
     public AnalysisPanel(final TuneController ctl) {
         super(new BorderLayout(6, 6));
         this.ctl = ctl;
         setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
-
-        biasModel.setYLabel("target \\ rpm");
-        targetModel.setYLabel("load \\ rpm");
-        JTable biasTable = new JTable(biasModel);
-        JTable targetTable = new JTable(targetModel);
-        biasTable.setDefaultRenderer(Object.class, new QualityRenderer(biasModel, true));
-        targetTable.setDefaultRenderer(Object.class, new QualityRenderer(targetModel, false));
-
-        JPanel tables = new JPanel(new GridLayout(1, 2, 6, 6));
-        tables.add(titled("Bias / feed-forward duty table for the next run (green = measured, yellow = interpolated, orange = extrapolated, grey = borrowed)", biasTable));
-        tables.add(titled("Target table for the next run", targetTable));
-
         details.setEditable(false);
         details.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tables, new JScrollPane(details));
@@ -64,56 +49,45 @@ public final class AnalysisPanel extends JPanel {
         JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton analyze = new JButton("Analyze datalog as next run...");
         top.add(analyze);
-        top.add(new JLabel("Feed a TunerStudio .msl/.csv log of pulls made with the current plan instead of recording live."));
+        top.add(new JLabel("Feed a TunerStudio .msl/.csv log recorded with the current plan instead of recording live."));
         add(top, BorderLayout.NORTH);
         analyze.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 analyzeLog();
             }
         });
+        refresh();
     }
 
-    private static JPanel titled(String title, JComponent c) {
-        JPanel p = new JPanel(new BorderLayout());
-        JLabel l = new JLabel(title);
-        l.setFont(l.getFont().deriveFont(11f));
-        p.add(l, BorderLayout.NORTH);
-        p.add(new JScrollPane(c), BorderLayout.CENTER);
-        return p;
-    }
-
-    public void showReport(RunReport r) {
-        current = r;
-        if (r == null) {
-            return;
+    /** Rebuilds the tables and text from the controller's current driver. */
+    public void refresh() {
+        tables.removeAll();
+        List<TableView> views = ctl.tables();
+        tables.setLayout(new GridLayout(1, Math.max(1, views.size()), 6, 6));
+        for (TableView v : views) {
+            GridTableModel model = new GridTableModel();
+            model.setYLabel(v.yLabel);
+            model.setGrid(v.next, v.reference);
+            JTable table = new JTable(model);
+            table.setDefaultRenderer(Object.class, new CellRenderer(model, v.quality));
+            JPanel p = new JPanel(new BorderLayout());
+            JLabel l = new JLabel(v.title);
+            l.setFont(l.getFont().deriveFont(11f));
+            p.add(l, BorderLayout.NORTH);
+            p.add(new JScrollPane(table), BorderLayout.CENTER);
+            tables.add(p);
         }
-        AutotuneSession s = ctl.session();
-        if (r.nextPlan != null) {
-            biasModel.setGrid(r.nextPlan.ecu.biasTable, r.plan.ecu.biasTable);
-            targetModel.setGrid(r.nextPlan.ecu.targetTable, r.plan.ecu.targetTable);
+        if (views.isEmpty()) {
+            tables.add(new JLabel("No tables for this mode / no session yet."));
         }
-        StringBuilder sb = new StringBuilder(r.summary());
-        if (s != null && s.plantModel() != null) {
-            sb.append("\nPlant model (duty -> boost per RPM column):\n").append(s.plantModel().describe());
-        }
-        if (s != null && s.spoolTrim() != null && s.spoolTrim().max() > 0) {
-            sb.append("\nSpool trim applied to the bias table (%):\n").append(s.spoolTrim().toText("%7.1f"));
-        }
-        details.setText(sb.toString());
+        tables.revalidate();
+        tables.repaint();
+        details.setText(ctl.analysisText());
         details.setCaretPosition(0);
     }
 
-    public void showPlanOnly() {
-        AutotuneSession s = ctl.session();
-        if (s == null || s.plan() == null) {
-            return;
-        }
-        biasModel.setGrid(s.plan().ecu.biasTable, ctl.original() == null ? null : ctl.original().biasTable);
-        targetModel.setGrid(s.plan().ecu.targetTable, ctl.original() == null ? null : ctl.original().targetTable);
-    }
-
     private void analyzeLog() {
-        if (ctl.session() == null) {
+        if (ctl.driver() == null) {
             JOptionPane.showMessageDialog(this, "Start a session first: the log is analysed as the next run of the current plan.",
                     "Boost Autotune", JOptionPane.INFORMATION_MESSAGE);
             return;
@@ -137,35 +111,31 @@ public final class AnalysisPanel extends JPanel {
 
     private LogColumnMapping askMapping() {
         final JComboBox<String> preset = new JComboBox<String>(new String[]{"MS3 / Stealth PCM", "Speeduino", "rusEFI"});
-        final JTextField time = new JTextField("Time");
-        final JTextField rpm = new JTextField("RPM");
-        final JTextField tps = new JTextField("TPS");
-        final JTextField map = new JTextField("MAP");
-        final JTextField target = new JTextField("Boost target 1");
-        final JTextField duty = new JTextField("Boost duty");
-        final JTextField clt = new JTextField("CLT");
-        final JTextField gear = new JTextField("Gear");
+        final LogColumnMapping m0 = LogColumnMapping.ms3();
+        final JTextField[] fields = {
+                new JTextField(m0.time), new JTextField(m0.rpm), new JTextField(m0.tps), new JTextField(m0.map),
+                new JTextField(m0.target), new JTextField(m0.duty), new JTextField(m0.clt), new JTextField(m0.gear),
+                new JTextField(m0.vvtAngle), new JTextField(m0.vvtTarget), new JTextField(m0.advance),
+                new JTextField(m0.knockRetard), new JTextField(m0.knock), new JTextField(m0.afr),
+                new JTextField(m0.fuelLoad), new JTextField(m0.ignLoad)};
+        final String[] labels = {"Time", "RPM", "TPS", "MAP", "Boost target", "Boost duty", "CLT", "Gear",
+                "VVT angle", "VVT target", "Advance", "Knock retard", "Knock level", "AFR", "Fuel load", "Ign load"};
         preset.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 LogColumnMapping m = preset.getSelectedIndex() == 1 ? LogColumnMapping.speeduino()
                         : preset.getSelectedIndex() == 2 ? LogColumnMapping.rusefi() : LogColumnMapping.ms3();
-                time.setText(m.time);
-                rpm.setText(m.rpm);
-                tps.setText(m.tps);
-                map.setText(m.map);
-                target.setText(m.target);
-                duty.setText(m.duty);
-                clt.setText(m.clt);
-                gear.setText(m.gear == null ? "" : m.gear);
+                String[] v = {m.time, m.rpm, m.tps, m.map, m.target, m.duty, m.clt, m.gear, m.vvtAngle, m.vvtTarget,
+                        m.advance, m.knockRetard, m.knock, m.afr, m.fuelLoad, m.ignLoad};
+                for (int i = 0; i < fields.length; i++) {
+                    fields[i].setText(v[i] == null ? "" : v[i]);
+                }
             }
         });
         JPanel p = new JPanel(new GridLayout(0, 2, 4, 4));
         p.add(new JLabel("Preset"));
         p.add(preset);
-        String[] labels = {"Time column", "RPM column", "TPS column", "MAP column", "Boost target column", "Boost duty column", "CLT column", "Gear column"};
-        JTextField[] fields = {time, rpm, tps, map, target, duty, clt, gear};
         for (int i = 0; i < labels.length; i++) {
-            p.add(new JLabel(labels[i]));
+            p.add(new JLabel(labels[i] + " column"));
             p.add(fields[i]);
         }
         int r = JOptionPane.showConfirmDialog(this, p, "Datalog columns", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
@@ -173,23 +143,36 @@ public final class AnalysisPanel extends JPanel {
             return null;
         }
         LogColumnMapping m = new LogColumnMapping();
-        m.time = time.getText().trim();
-        m.rpm = rpm.getText().trim();
-        m.tps = tps.getText().trim();
-        m.map = map.getText().trim();
-        m.target = target.getText().trim();
-        m.duty = duty.getText().trim();
-        m.clt = clt.getText().trim();
-        m.gear = gear.getText().trim().isEmpty() ? null : gear.getText().trim();
+        m.time = t(fields[0]);
+        m.rpm = t(fields[1]);
+        m.tps = t(fields[2]);
+        m.map = t(fields[3]);
+        m.target = t(fields[4]);
+        m.duty = t(fields[5]);
+        m.clt = t(fields[6]);
+        m.gear = t(fields[7]);
+        m.vvtAngle = t(fields[8]);
+        m.vvtTarget = t(fields[9]);
+        m.advance = t(fields[10]);
+        m.knockRetard = t(fields[11]);
+        m.knock = t(fields[12]);
+        m.afr = t(fields[13]);
+        m.fuelLoad = t(fields[14]);
+        m.ignLoad = t(fields[15]);
         return m;
     }
 
-    /** Colours cells by estimate quality (bias) or by change (targets). */
-    private final class QualityRenderer extends DefaultTableCellRenderer {
-        private final GridTableModel model;
-        private final boolean quality;
+    private static String t(JTextField f) {
+        String s = f.getText().trim();
+        return s.isEmpty() ? null : s;
+    }
 
-        QualityRenderer(GridTableModel model, boolean quality) {
+    /** Colours cells by estimate quality (bias table) or by change against the reference. */
+    private static final class CellRenderer extends DefaultTableCellRenderer {
+        private final GridTableModel model;
+        private final BiasBuildResult quality;
+
+        CellRenderer(GridTableModel model, BiasBuildResult quality) {
             this.model = model;
             this.quality = quality;
             setHorizontalAlignment(RIGHT);
@@ -201,21 +184,20 @@ public final class AnalysisPanel extends JPanel {
             Color bg = Color.WHITE;
             if (col == 0) {
                 bg = new Color(235, 235, 235);
-            } else if (quality && current != null && current.biasResult != null && model.grid() != null) {
-                BiasBuildResult b = current.biasResult;
+            } else if (quality != null && model.grid() != null) {
                 int yi = model.yIndex(row);
                 int xi = col - 1;
-                if (yi < b.quality.length && xi < b.quality[yi].length) {
-                    DutyEstimate.Quality q = b.quality[yi][xi];
+                if (yi < quality.quality.length && xi < quality.quality[yi].length) {
+                    DutyEstimate.Quality q = quality.quality[yi][xi];
                     if (q == DutyEstimate.Quality.MEASURED) bg = new Color(200, 240, 200);
                     else if (q == DutyEstimate.Quality.INTERPOLATED) bg = new Color(245, 240, 180);
                     else if (q == DutyEstimate.Quality.EXTRAPOLATED) bg = new Color(250, 215, 170);
                     else if (q == DutyEstimate.Quality.BORROWED) bg = new Color(220, 220, 220);
                 }
-            } else if (!quality) {
+            } else {
                 double d = model.delta(row, col);
-                if (d > 0.5) bg = new Color(200, 225, 255);
-                else if (d < -0.5) bg = new Color(255, 215, 215);
+                if (d > 0.05) bg = new Color(200, 225, 255);
+                else if (d < -0.05) bg = new Color(255, 215, 215);
             }
             c.setBackground(sel ? bg.darker() : bg);
             return c;

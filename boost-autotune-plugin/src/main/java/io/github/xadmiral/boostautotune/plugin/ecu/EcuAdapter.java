@@ -19,7 +19,10 @@ public final class EcuAdapter {
     private TableLayout targetLayout;
     private TableLayout biasLayout;
     private TableLayout openLoopLayout;
+    private TableLayout vvtLayout;
+    private TableLayout sparkLayout;
     private EcuPort.ParamInfo pInfo, iInfo, dInfo, targetInfo;
+    private EcuPort.ParamInfo vvtPInfo, vvtIInfo, vvtDInfo, vvtTableInfo, sparkTableInfo;
 
     public EcuAdapter(EcuPort port, EcuBinding binding) {
         this.port = port;
@@ -169,6 +172,71 @@ public final class EcuAdapter {
 
     public void burn() throws EcuException {
         port.burn(config());
+    }
+
+    // ---- VVT ----------------------------------------------------------------------------------
+
+    public Grid readVvtTable() throws EcuException {
+        String cfg = config();
+        vvtTableInfo = port.parameterInfo(cfg, b.vvtTable);
+        vvtLayout = layoutFor(cfg, b.vvtTable, b.vvtXBins, b.vvtYBins, vvtTableInfo);
+        return readGrid(cfg, b.vvtTable, b.vvtXBins, b.vvtYBins, vvtLayout);
+    }
+
+    public void writeVvtTable(Grid g) throws EcuException {
+        if (vvtLayout == null) {
+            readVvtTable();
+        }
+        port.writeArray2D(config(), b.vvtTable, vvtLayout.fromGrid(g));
+    }
+
+    public EcuPort.ParamInfo vvtTableInfo() {
+        return vvtTableInfo;
+    }
+
+    public PidGains readVvtGains() throws EcuException {
+        String cfg = config();
+        vvtPInfo = port.parameterInfo(cfg, b.vvtPidP);
+        vvtIInfo = port.parameterInfo(cfg, b.vvtPidI);
+        double d = 0;
+        if (b.has(b.vvtPidD)) {
+            vvtDInfo = port.parameterInfo(cfg, b.vvtPidD);
+            d = port.readScalar(cfg, b.vvtPidD);
+        }
+        return new PidGains(port.readScalar(cfg, b.vvtPidP), port.readScalar(cfg, b.vvtPidI), d);
+    }
+
+    public void writeVvtGains(PidGains g) throws EcuException {
+        String cfg = config();
+        port.writeScalar(cfg, b.vvtPidP, g.p);
+        port.writeScalar(cfg, b.vvtPidI, g.i);
+        if (b.has(b.vvtPidD)) {
+            port.writeScalar(cfg, b.vvtPidD, g.d);
+        }
+    }
+
+    public EcuPort.ParamInfo vvtPidInfo(int which) {
+        return which == 0 ? vvtPInfo : which == 1 ? vvtIInfo : vvtDInfo;
+    }
+
+    // ---- ignition -----------------------------------------------------------------------------
+
+    public Grid readSparkTable() throws EcuException {
+        String cfg = config();
+        sparkTableInfo = port.parameterInfo(cfg, b.sparkTable);
+        sparkLayout = layoutFor(cfg, b.sparkTable, b.sparkXBins, b.sparkYBins, sparkTableInfo);
+        return readGrid(cfg, b.sparkTable, b.sparkXBins, b.sparkYBins, sparkLayout);
+    }
+
+    public void writeSparkTable(Grid g) throws EcuException {
+        if (sparkLayout == null) {
+            readSparkTable();
+        }
+        port.writeArray2D(config(), b.sparkTable, sparkLayout.fromGrid(g));
+    }
+
+    public EcuPort.ParamInfo sparkTableInfo() {
+        return sparkTableInfo;
     }
 
     public TableLayout targetLayout() {

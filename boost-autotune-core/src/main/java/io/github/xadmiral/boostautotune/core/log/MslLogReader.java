@@ -34,6 +34,7 @@ public final class MslLogReader {
         char sep = '\t';
         boolean unitsRowSkipped = false;
         int idxTime = -1, idxRpm = -1, idxTps = -1, idxMap = -1, idxTarget = -1, idxDuty = -1, idxClt = -1, idxGear = -1, idxCut = -1;
+        int idxFuelLoad = -1, idxIgnLoad = -1, idxVvtAng = -1, idxVvtTgt = -1, idxAdv = -1, idxKnock = -1, idxKnockRtd = -1, idxAfr = -1;
         double lastTime = 0;
         int rowIndex = 0;
         while ((line = br.readLine()) != null) {
@@ -58,6 +59,14 @@ public final class MslLogReader {
                 idxClt = find(header, map.clt);
                 idxGear = find(header, map.gear);
                 idxCut = find(header, map.boostCut);
+                idxFuelLoad = find(header, map.fuelLoad);
+                idxIgnLoad = find(header, map.ignLoad);
+                idxVvtAng = find(header, map.vvtAngle);
+                idxVvtTgt = find(header, map.vvtTarget);
+                idxAdv = find(header, map.advance);
+                idxKnock = find(header, map.knock);
+                idxKnockRtd = find(header, map.knockRetard);
+                idxAfr = find(header, map.afr);
                 if (idxRpm < 0 || idxMap < 0 || idxTps < 0) {
                     throw new IOException("Log is missing one of the required columns RPM / MAP / TPS (mapped as '"
                             + map.rpm + "', '" + map.map + "', '" + map.tps + "'). Columns: " + r.columns);
@@ -98,6 +107,14 @@ public final class MslLogReader {
                         .clt(clt)
                         .gear(idxGear >= 0 ? (int) Math.round(parse(f[idxGear])) : 0)
                         .boostCut(idxCut >= 0 && parse(f[idxCut]) != 0)
+                        .fuelLoad(opt(f, idxFuelLoad))
+                        .ignLoad(opt(f, idxIgnLoad))
+                        .vvtAngle(opt(f, idxVvtAng))
+                        .vvtTarget(opt(f, idxVvtTgt))
+                        .advance(opt(f, idxAdv))
+                        .knock(opt(f, idxKnock))
+                        .knockRetard(opt(f, idxKnockRtd))
+                        .afr(opt(f, idxAfr))
                         .build();
                 r.samples.add(s);
             } catch (NumberFormatException e) {
@@ -141,6 +158,17 @@ public final class MslLogReader {
             }
         }
         return -1;
+    }
+
+    private static double opt(String[] f, int idx) {
+        if (idx < 0 || idx >= f.length) {
+            return Double.NaN;
+        }
+        try {
+            return parse(f[idx]);
+        } catch (NumberFormatException e) {
+            return Double.NaN;
+        }
     }
 
     private static boolean isNumeric(String s) {

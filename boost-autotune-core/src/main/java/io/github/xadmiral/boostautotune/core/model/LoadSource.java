@@ -5,7 +5,9 @@ public enum LoadSource {
     TPS("Throttle position (%)"),
     BOOST_TARGET("Boost target (kPa)"),
     MAP("Manifold pressure (kPa)"),
-    GEAR("Gear");
+    GEAR("Gear"),
+    FUEL_LOAD("Fuel load (kPa / %)"),
+    IGN_LOAD("Ignition load (kPa / %)");
 
     private final String label;
 

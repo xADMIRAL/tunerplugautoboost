@@ -63,6 +63,33 @@ public final class Form {
         return tf;
     }
 
+    /** A number field where an empty box means "not set" (NaN). */
+    public JTextField addOptionalDouble(final String label, String tooltip, final DoubleGet get, final DoubleSet set) {
+        final JTextField tf = new JTextField(8);
+        tf.setToolTipText(tooltip);
+        add(label, tf, tooltip);
+        fields.add(new Field() {
+            public void refresh() {
+                double v = get.get();
+                tf.setText(Double.isNaN(v) ? "" : fmt(v));
+            }
+
+            public void apply() {
+                String t = tf.getText().trim().replace(',', '.');
+                if (t.isEmpty()) {
+                    set.set(Double.NaN);
+                    return;
+                }
+                try {
+                    set.set(Double.parseDouble(t));
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException(label + ": '" + tf.getText() + "' is not a number");
+                }
+            }
+        });
+        return tf;
+    }
+
     public JTextField addText(String label, String tooltip, final TextGet get, final TextSet set) {
         final JTextField tf = new JTextField(14);
         tf.setToolTipText(tooltip);
