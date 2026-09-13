@@ -21,6 +21,7 @@ public final class PullSimulator {
 
     private final BoostPlant plant;
     private final SimEcu ecu;
+    private final java.util.Random noise = new java.util.Random(4242);
     private double time;
 
     public PullSimulator(BoostPlant plant, SimEcu ecu) {
@@ -130,7 +131,7 @@ public final class PullSimulator {
         Sample.Builder b = Sample.builder().time(time).rpm(rpm).tps(tps).map(noisy).target(target).duty(duty)
                 .clt(cltC).gear(gear).boostCut(false).fuelLoad(noisy).ignLoad(noisy);
         if (ecu.vvtTable != null) {
-            b.vvtAngle(ecu.camAngle() + (Math.random() - 0.5) * 0.4).vvtTarget(ecu.vvtTarget());
+            b.vvtAngle(ecu.camAngle() + (noise.nextDouble() - 0.5) * 0.4).vvtTarget(ecu.vvtTarget());
         }
         if (ecu.sparkTable != null) {
             b.advance(adv).knock(ecu.knockLevel()).knockRetard(ecu.knockRetard()).afr(tps >= 85 ? 11.8 : 14.7).afrTarget(tps >= 85 ? 11.8 : 14.7);

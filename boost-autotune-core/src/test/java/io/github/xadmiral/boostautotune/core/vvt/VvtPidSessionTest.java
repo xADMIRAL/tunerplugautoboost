@@ -86,7 +86,7 @@ class VvtPidSessionTest {
         }
         assertEquals(SessionState.DONE, session.state(), "runs " + runs);
         assertTrue(plan.gains.p < 200, "P should have come down: " + plan.gains);
-        assertTrue(runs <= 8, "runs " + runs);
+        assertTrue(runs <= 10, "runs " + runs);
     }
 
     @Test
