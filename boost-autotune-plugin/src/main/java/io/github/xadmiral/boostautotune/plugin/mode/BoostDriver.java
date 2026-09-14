@@ -66,6 +66,11 @@ public final class BoostDriver implements ModeDriver {
             c.dMin = d.min;
             c.dMax = d.max;
         }
+        EcuPort.ParamInfo w = adapter.windowInfo();
+        if (w != null && w.max > w.min) {
+            c.windowMinKpa = Math.max(c.windowMinKpa, w.min);
+            c.windowMaxKpa = Math.min(c.windowMaxKpa, w.max);
+        }
     }
 
     public List<String> startupLog() {

@@ -190,6 +190,15 @@ public final class SettingsStore {
         p.setProperty(pre + "runsRequiredPerStage", Integer.toString(c.runsRequiredPerStage));
         p.setProperty(pre + "biasSettledPct", fmt(c.biasSettledPct));
         p.setProperty(pre + "autoEndRunIdleSec", fmt(c.autoEndRunIdleSec));
+        p.setProperty(pre + "fastSpool", Boolean.toString(c.fastSpool));
+        p.setProperty(pre + "spoolShutDutyPct", fmt(c.spoolShutDutyPct));
+        p.setProperty(pre + "spoolImproveRpm", fmt(c.spoolImproveRpm));
+        p.setProperty(pre + "maxSpoolPushesPerStage", Integer.toString(c.maxSpoolPushesPerStage));
+        p.setProperty(pre + "spoolBoostStepPct", fmt(c.spoolBoostStepPct));
+        p.setProperty(pre + "tuneClosedLoopWindow", Boolean.toString(c.tuneClosedLoopWindow));
+        p.setProperty(pre + "windowStepKpa", fmt(c.windowStepKpa));
+        p.setProperty(pre + "windowMinKpa", fmt(c.windowMinKpa));
+        p.setProperty(pre + "windowMaxKpa", fmt(c.windowMaxKpa));
     }
 
     public static void configFrom(AutotuneConfig c, Properties p, String pre) {
@@ -247,6 +256,15 @@ public final class SettingsStore {
         c.runsRequiredPerStage = (int) d(p, pre + "runsRequiredPerStage", c.runsRequiredPerStage);
         c.biasSettledPct = d(p, pre + "biasSettledPct", c.biasSettledPct);
         c.autoEndRunIdleSec = d(p, pre + "autoEndRunIdleSec", c.autoEndRunIdleSec);
+        c.fastSpool = bool(p, pre + "fastSpool", c.fastSpool);
+        c.spoolShutDutyPct = d(p, pre + "spoolShutDutyPct", c.spoolShutDutyPct);
+        c.spoolImproveRpm = d(p, pre + "spoolImproveRpm", c.spoolImproveRpm);
+        c.maxSpoolPushesPerStage = (int) d(p, pre + "maxSpoolPushesPerStage", c.maxSpoolPushesPerStage);
+        c.spoolBoostStepPct = d(p, pre + "spoolBoostStepPct", c.spoolBoostStepPct);
+        c.tuneClosedLoopWindow = bool(p, pre + "tuneClosedLoopWindow", c.tuneClosedLoopWindow);
+        c.windowStepKpa = d(p, pre + "windowStepKpa", c.windowStepKpa);
+        c.windowMinKpa = d(p, pre + "windowMinKpa", c.windowMinKpa);
+        c.windowMaxKpa = d(p, pre + "windowMaxKpa", c.windowMaxKpa);
     }
 
     public static void sweepTo(SweepConfig c, Properties p, String pre) {

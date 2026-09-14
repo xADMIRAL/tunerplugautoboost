@@ -128,6 +128,9 @@ public final class SimEcu {
 
     public void apply(EcuState s) {
         this.state = s.copy();
+        if (!Double.isNaN(s.closedLoopWindowKpa)) {
+            lowerLimitDeltaKpa = s.closedLoopWindowKpa;
+        }
         integral = 0;
         lastError = Double.NaN;
     }

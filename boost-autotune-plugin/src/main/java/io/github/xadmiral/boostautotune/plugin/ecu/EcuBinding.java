@@ -53,6 +53,8 @@ public final class EcuBinding {
     public String minDuty = "";
     public String maxDuty = "";
     public String overboostLimit = "";
+    /** Closed-loop activation window below the target (MS3 "lower limit delta"), optional; tuned by fast spool. */
+    public String closedLoopWindowParam = "";
 
     // mode switches (bits parameters; options are the ini option strings)
     public String modeParam = "";
@@ -239,6 +241,7 @@ public final class EcuBinding {
         checkParam(problems, params, "Boost control enable", enableParam, false);
         checkParam(problems, params, "Extra closed-loop parameter", closedLoopExtraParam, false);
         checkParam(problems, params, "Overboost limit", overboostLimit, false);
+        checkParam(problems, params, "Closed-loop window parameter", closedLoopWindowParam, false);
         if (hasOpenLoopTable() && !hasModeSwitch()) {
             problems.add("Open-loop characterization needs the open/closed loop switch parameter and both option names");
         }
@@ -297,6 +300,7 @@ public final class EcuBinding {
         p.setProperty(prefix + "minDuty", minDuty);
         p.setProperty(prefix + "maxDuty", maxDuty);
         p.setProperty(prefix + "overboostLimit", overboostLimit);
+        p.setProperty(prefix + "closedLoopWindowParam", closedLoopWindowParam);
         p.setProperty(prefix + "modeParam", modeParam);
         p.setProperty(prefix + "openLoopOption", openLoopOption);
         p.setProperty(prefix + "closedLoopOption", closedLoopOption);
@@ -369,6 +373,7 @@ public final class EcuBinding {
         minDuty = p.getProperty(prefix + "minDuty", minDuty);
         maxDuty = p.getProperty(prefix + "maxDuty", maxDuty);
         overboostLimit = p.getProperty(prefix + "overboostLimit", overboostLimit);
+        closedLoopWindowParam = p.getProperty(prefix + "closedLoopWindowParam", closedLoopWindowParam);
         modeParam = p.getProperty(prefix + "modeParam", modeParam);
         openLoopOption = p.getProperty(prefix + "openLoopOption", openLoopOption);
         closedLoopOption = p.getProperty(prefix + "closedLoopOption", closedLoopOption);

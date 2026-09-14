@@ -22,6 +22,8 @@ public final class EcuState {
     public boolean closedLoop;
     /** Largest value accepted by the target table. */
     public double targetTableMax = 400;
+    /** Closed-loop activation window below the target (MS3 "lower limit delta"), kPa; NaN when not bound. */
+    public double closedLoopWindowKpa = Double.NaN;
 
     public EcuState copy() {
         EcuState c = new EcuState();
@@ -35,6 +37,7 @@ public final class EcuState {
         c.maxDuty = maxDuty;
         c.closedLoop = closedLoop;
         c.targetTableMax = targetTableMax;
+        c.closedLoopWindowKpa = closedLoopWindowKpa;
         return c;
     }
 

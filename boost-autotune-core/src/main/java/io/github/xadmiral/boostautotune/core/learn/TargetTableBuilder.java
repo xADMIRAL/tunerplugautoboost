@@ -10,10 +10,19 @@ public final class TargetTableBuilder {
     private TargetTableBuilder() {
     }
 
-    /** Target at an RPM for WOT rows: spool ramp, flat stage target, optional high-RPM taper. */
+    /**
+     * Target at an RPM for WOT rows: spool ramp (or, with {@link AutotuneConfig#fastSpool}, wastegate
+     * pressure up to the spool-start RPM and the flat stage target from there on), optional high-RPM taper.
+     */
     public static double targetAtRpm(double rpm, double stageTarget, AutotuneConfig cfg, double rpmAxisMax) {
         double t = stageTarget;
-        if (cfg.fullTargetRpm > 0 && rpm < cfg.fullTargetRpm) {
+        if (cfg.fastSpool) {
+            // no ramp: a ramp makes the loop crack the valve open before the stage target is in reach.
+            // Cells the turbo cannot fill steadily are lowered afterwards by the target trimmer.
+            if (cfg.spoolStartRpm > 0 && rpm <= cfg.spoolStartRpm) {
+                t = cfg.wastegateKpa;
+            }
+        } else if (cfg.fullTargetRpm > 0 && rpm < cfg.fullTargetRpm) {
             if (rpm <= cfg.spoolStartRpm) {
                 t = cfg.wastegateKpa;
             } else {

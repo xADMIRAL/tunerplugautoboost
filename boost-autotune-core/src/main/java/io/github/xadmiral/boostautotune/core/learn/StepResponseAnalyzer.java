@@ -123,9 +123,25 @@ public final class StepResponseAnalyzer {
                 oscCycles = 0.5;
             }
         }
+        double reachRpm = reached ? s.get(reachIdx).rpm : Double.NaN;
+        double spoolSec = reached ? s.get(reachIdx).timeSec - pull.startTime() : Double.NaN;
         return new ResponseMetrics(pull, true, reached, targetMed, peak, overshoot, rise, ssErr, meanAbs,
                 oscAmp, oscCycles, oscPeriod, active == 0 ? 0 : (double) satHi / active,
-                active == 0 ? 0 : (double) satLo / active, settled);
+                active == 0 ? 0 : (double) satLo / active, settled, reachRpm, spoolSec);
+    }
+
+    /**
+     * Where a pull first reached a fixed target: {rpm, seconds after the throttle opened}, or null
+     * when it never did. Used on open-loop characterization pulls to find the physical spool floor
+     * (valve shut) that the closed loop is later compared against.
+     */
+    public static double[] reach(Pull pull, double targetKpa, double tolKpa, double minRpm) {
+        for (Sample x : pull.samples()) {
+            if (x.rpm >= minRpm && Stats.finite(x.map) && x.map >= targetKpa - tolKpa) {
+                return new double[]{x.rpm, x.timeSec - pull.startTime()};
+            }
+        }
+        return null;
     }
 
     static double[] smooth(List<Double> v, int w) {

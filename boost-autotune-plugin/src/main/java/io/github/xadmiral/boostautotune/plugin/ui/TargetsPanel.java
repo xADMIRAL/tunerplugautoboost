@@ -52,12 +52,38 @@ public final class TargetsPanel extends JPanel {
         form.addDouble("Wastegate spring pressure, kPa", "Boost with the valve fully open; targets below spool RPM",
                 new Form.DoubleGet() { public double get() { return cfg.wastegateKpa; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.wastegateKpa = v; } });
-        form.addDouble("Spool start RPM", "Target ramps up from wastegate pressure here (0 = flat target)",
+        form.addDouble("Spool start RPM", "Ramp mode: target ramps up from wastegate pressure here. Fast spool: wastegate pressure up to here, the stage target right above (0 = flat)",
                 new Form.DoubleGet() { public double get() { return cfg.spoolStartRpm; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.spoolStartRpm = v; } });
-        form.addDouble("Full target RPM", "Target reaches the stage value here (0 = flat target)",
+        form.addDouble("Full target RPM", "Ramp mode only: target reaches the stage value here (0 = flat target)",
                 new Form.DoubleGet() { public double get() { return cfg.fullTargetRpm; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.fullTargetRpm = v; } });
+
+        form.section("Spool");
+        form.addBool("Fastest spool to target", "Valve held shut wherever the target is out of reach, flat target instead of the ramp, then trim / feed-forward / P / closed-loop window are pushed while the target keeps arriving earlier without overshoot",
+                new Form.BoolGet() { public boolean get() { return cfg.fastSpool; } },
+                new Form.BoolSet() { public void set(boolean v) { cfg.fastSpool = v; } });
+        form.addDouble("Valve counts as shut above, % duty", "A bias cell whose estimate asks for at least this much duty is written as maximum duty",
+                new Form.DoubleGet() { public double get() { return cfg.spoolShutDutyPct; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.spoolShutDutyPct = v; } });
+        form.addDouble("Push runs on the last stage", "Extra runs spent pushing the spool once the loop is settled (0 = none)",
+                new Form.DoubleGet() { public double get() { return cfg.maxSpoolPushesPerStage; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.maxSpoolPushesPerStage = (int) Math.max(0, v); } });
+        form.addDouble("A push must gain at least, RPM", "The target has to arrive this much earlier for a push to be kept going",
+                new Form.DoubleGet() { public double get() { return cfg.spoolImproveRpm; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.spoolImproveRpm = v; } });
+        form.addDouble("Feed-forward push step, %", "Bias raised above the steady duty around the RPM where the target arrives, per push",
+                new Form.DoubleGet() { public double get() { return cfg.spoolBoostStepPct; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.spoolBoostStepPct = v; } });
+        form.addBool("Tune the closed-loop window", "MS3 'lower limit delta' (needs the Setup binding): widened by a push, narrowed when overshoot persists",
+                new Form.BoolGet() { public boolean get() { return cfg.tuneClosedLoopWindow; } },
+                new Form.BoolSet() { public void set(boolean v) { cfg.tuneClosedLoopWindow = v; } });
+        form.addDouble("Window step, kPa", "", new Form.DoubleGet() { public double get() { return cfg.windowStepKpa; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.windowStepKpa = v; } });
+        form.addDouble("Window minimum, kPa", "", new Form.DoubleGet() { public double get() { return cfg.windowMinKpa; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.windowMinKpa = v; } });
+        form.addDouble("Window maximum, kPa", "", new Form.DoubleGet() { public double get() { return cfg.windowMaxKpa; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.windowMaxKpa = v; } });
         form.addDouble("High-RPM taper, kPa", "Lower the target by this much at the last RPM bin (0 = off)",
                 new Form.DoubleGet() { public double get() { return cfg.highRpmTaperKpa; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.highRpmTaperKpa = v; } });

@@ -21,7 +21,18 @@ names preset. Best-effort presets exist for stock MS3 1.5+, Speeduino and rusEFI
    every run: overshoot / rise time / steady-state error / oscillation → relative PID steps, bias
    refinement from lag-compensated steady samples, "spool trim" for single-bump overshoot, and
    trimming of unreachable targets. A stage converges after two consecutive good runs.
-   The simulator test converges 150 → 170 kPa in 9 runs.
+   The simulator test converges 150 → 170 kPa in 9 runs with the classic ramp, 14 with fast spool.
+4. **Fastest spool to target** (on by default, Boost tab). A target ramp makes the loop crack the
+   wastegate open early, and the MS3 PID only acts inside the `boost_ctl_lowerlimit` window below
+   the target (below it the duty is the bias table alone). So the plugin holds the valve shut
+   (maximum duty) in every bias cell whose target is out of reach, writes a flat stage target
+   right above the spool-start RPM instead of a ramp, records at which RPM and how many seconds
+   after WOT the target arrived, and once the loop is settled spends up to 4 extra runs pushing one
+   knob at a time: relax the spool trim → add feed-forward around the RPM where the target arrives
+   → raise P → widen the closed-loop window. A push is kept while the target arrives at least
+   50 rpm earlier without overshoot beyond the limit; a push that brings overshoot is reverted.
+   A rise bump that survives a deep trim gets anticipation (D up, I down) and a narrower window.
+   In the simulator 170 kPa arrives about 230 rpm earlier than with the ramp.
 
 ## VVT and ignition modes
 

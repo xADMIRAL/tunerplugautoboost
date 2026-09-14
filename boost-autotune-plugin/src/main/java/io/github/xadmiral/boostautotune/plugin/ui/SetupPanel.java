@@ -75,6 +75,7 @@ public final class SetupPanel extends JPanel {
             new Row("minDuty", "Minimum duty", "param"),
             new Row("maxDuty", "Maximum duty", "param"),
             new Row("overboostLimit", "ECU overboost cut limit (read only)", "param"),
+            new Row("closedLoopWindowParam", "Closed-loop window / lower limit delta, kPa (optional, fast spool)", "param"),
             new Row("enableParam", "Boost control enable parameter", "param"),
             new Row("enableOption", "  ... option meaning ON", "text"),
             new Row("modeParam", "Open / closed loop switch", "param"),

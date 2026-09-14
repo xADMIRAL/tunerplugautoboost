@@ -24,6 +24,7 @@ public final class EcuAdapter {
     private TableLayout alsLayout;
     private EcuPort.ParamInfo alsTableInfo;
     private EcuPort.ParamInfo pInfo, iInfo, dInfo, targetInfo;
+    private EcuPort.ParamInfo windowInfo;
     private EcuPort.ParamInfo vvtPInfo, vvtIInfo, vvtDInfo, vvtTableInfo, sparkTableInfo;
 
     public EcuAdapter(EcuPort port, EcuBinding binding) {
@@ -81,6 +82,13 @@ public final class EcuAdapter {
         s.pid = new PidGains(p, i, d);
         s.minDuty = b.has(b.minDuty) ? port.readScalar(cfg, b.minDuty) : 0;
         s.maxDuty = b.has(b.maxDuty) ? port.readScalar(cfg, b.maxDuty) : 100;
+        if (b.has(b.closedLoopWindowParam)) {
+            windowInfo = port.parameterInfo(cfg, b.closedLoopWindowParam);
+            s.closedLoopWindowKpa = port.readScalar(cfg, b.closedLoopWindowParam);
+        } else {
+            windowInfo = null;
+            s.closedLoopWindowKpa = Double.NaN;
+        }
         if (s.minDuty >= s.maxDuty) {
             warnings.add(String.format(Locale.US, "Min duty %.0f%% is not below max duty %.0f%%", s.minDuty, s.maxDuty));
         }
@@ -115,6 +123,11 @@ public final class EcuAdapter {
         return which == 0 ? pInfo : which == 1 ? iInfo : dInfo;
     }
 
+    /** Range of the closed-loop window parameter, or null when it is not bound. */
+    public EcuPort.ParamInfo windowInfo() {
+        return windowInfo;
+    }
+
     /** Writes tables, gains and mode. Returns a description of what was written. */
     public List<String> write(EcuState s, boolean writeTargets, boolean writeBias, boolean writeOpenLoop) throws EcuException {
         String cfg = config();
@@ -137,6 +150,10 @@ public final class EcuAdapter {
             port.writeScalar(cfg, b.pidD, s.pid.d);
         }
         done.add("PID " + s.pid);
+        if (b.has(b.closedLoopWindowParam) && !Double.isNaN(s.closedLoopWindowKpa)) {
+            port.writeScalar(cfg, b.closedLoopWindowParam, s.closedLoopWindowKpa);
+            done.add(b.closedLoopWindowParam + " = " + s.closedLoopWindowKpa);
+        }
         if (b.has(b.enableParam) && b.has(b.enableOption)) {
             port.writeOption(cfg, b.enableParam, b.enableOption);
         }

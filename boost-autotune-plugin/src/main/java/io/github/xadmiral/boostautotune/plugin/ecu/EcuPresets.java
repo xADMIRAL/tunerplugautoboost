@@ -52,6 +52,7 @@ public final class EcuPresets {
             b.minDuty = "boost_ctl_closeduty";
             b.maxDuty = "boost_ctl_openduty";
             b.overboostLimit = "OverBoostKpa";
+            b.closedLoopWindowParam = "boost_ctl_lowerlimit";
             b.modeParam = "boost_ctl_settings_cl";
             b.openLoopOption = "Open-loop";
             b.closedLoopOption = "Closed-loop";

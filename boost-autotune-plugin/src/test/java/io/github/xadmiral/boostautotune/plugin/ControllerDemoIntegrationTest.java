@@ -66,7 +66,7 @@ class ControllerDemoIntegrationTest {
         assertEquals(100, ctl.original().biasTable.get(0, 0), 1e-9);
 
         int runs = 0;
-        while (ctl.state() != SessionState.DONE && runs < 12) {
+        while (ctl.state() != SessionState.DONE && runs < 16) {
             ctl.writePlanToEcu();
             assertTrue(ctl.isEcuPrepared());
             // the plan must be visible in the simulated ECU
@@ -86,7 +86,10 @@ class ControllerDemoIntegrationTest {
             runs++;
         }
         assertEquals(SessionState.DONE, ctl.state(), String.join("\n", listener.log));
-        assertTrue(runs <= 12, "runs " + runs);
+        assertTrue(runs <= 16, "runs " + runs);
+        assertTrue(String.join("\n", listener.log).contains("Spool push"), "fast spool pushes expected in the log");
+        double window = port.readScalar(SimEcuPort.CONFIG, binding.closedLoopWindowParam);
+        assertTrue(window >= 25 && window <= 40, "closed-loop window moved by at most two steps: " + window);
         assertTrue(listener.samples > 500);
         // the tune landed in the simulated ECU
         assertEquals("Closed-loop", port.readOption(SimEcuPort.CONFIG, binding.modeParam));

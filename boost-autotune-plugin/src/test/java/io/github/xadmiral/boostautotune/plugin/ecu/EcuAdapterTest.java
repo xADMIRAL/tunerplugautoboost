@@ -34,6 +34,11 @@ class EcuAdapterTest {
         assertEquals("Closed-loop", port.readOption(SimEcuPort.CONFIG, b.modeParam));
         assertEquals("Advanced Mode", port.readOption(SimEcuPort.CONFIG, b.closedLoopExtraParam));
         assertEquals(210, a.readOverboostLimit(), 1e-9);
+        assertEquals(30, s.closedLoopWindowKpa, 1e-9);
+        assertEquals(5, a.windowInfo().min, 1e-9);
+        s.closedLoopWindowKpa = 25;
+        a.write(s, false, false, false);
+        assertEquals(25, port.readScalar(SimEcuPort.CONFIG, b.closedLoopWindowParam), 1e-9);
     }
 
     @Test

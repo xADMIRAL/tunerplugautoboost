@@ -63,6 +63,7 @@ class AutotuneEndToEndTest {
     @Test
     void convergesOnTwoStagesWithinAFewRuns() {
         AutotuneConfig cfg = config();
+        cfg.fastSpool = false; // classic ramp flow; the fast-spool flow has its own test below
         AutotuneSession session = new AutotuneSession(cfg);
         BoostPlant plant = new BoostPlant(42);
         SimEcu ecu = new SimEcu(untouchedMs3Tune());
@@ -125,6 +126,107 @@ class AutotuneEndToEndTest {
         Grid targets = plan.ecu.targetTable;
         assertEquals(170, targets.get(7, 7), 1e-9);
         assertEquals(130, targets.get(0, 7), 1e-9);
+    }
+
+    private static final class Outcome {
+        int runs;
+        RunReport last;
+        RunPlan plan;
+        double finalReach = Double.NaN;
+        double bestReach = Double.NaN;
+        int pushes;
+        final List<String> log = new ArrayList<String>();
+    }
+
+    /** Drives a whole session (3rd + 4th gear pull per run) and returns what it ended with. */
+    private static Outcome drive(AutotuneConfig cfg, int maxRuns, boolean bindWindow) {
+        AutotuneSession session = new AutotuneSession(cfg);
+        BoostPlant plant = new BoostPlant(42);
+        EcuState tune = untouchedMs3Tune();
+        tune.closedLoopWindowKpa = bindWindow ? 30 : Double.NaN;
+        SimEcu ecu = new SimEcu(tune);
+        PullSimulator sim = new PullSimulator(plant, ecu);
+        RunPlan plan = session.initialize(tune);
+        Outcome o = new Outcome();
+        while (session.state() != SessionState.DONE && o.runs < maxRuns) {
+            ecu.apply(plan.ecu);
+            session.startRun();
+            for (int gear : new int[]{3, 4}) {
+                for (Sample s : sim.pull(gear)) {
+                    session.onSample(s);
+                }
+                sim.setTime(sim.time() + 3);
+            }
+            assertNotEquals(SessionState.ABORTED, session.state(), "aborted: " + session.abortReason());
+            RunReport r = session.endRun();
+            o.log.add(r.summary());
+            if (r.spoolPush != null) {
+                o.pushes++;
+            }
+            if (!Double.isNaN(r.spoolReachRpm)) {
+                o.finalReach = r.spoolReachRpm;
+                o.bestReach = Double.isNaN(o.bestReach) ? r.spoolReachRpm : Math.min(o.bestReach, r.spoolReachRpm);
+            }
+            o.last = r;
+            plan = session.commit(r);
+            o.runs++;
+        }
+        o.plan = plan;
+        assertEquals(SessionState.DONE, session.state(), "did not converge in " + o.runs + " runs:\n" + String.join("\n", o.log));
+        return o;
+    }
+
+    @Test
+    void fastSpoolReachesTheTargetEarlierThanTheRamp() {
+        AutotuneConfig legacyCfg = config();
+        legacyCfg.fastSpool = false;
+        Outcome legacy = drive(legacyCfg, 14, true);
+        AutotuneConfig fastCfg = config();
+        fastCfg.fastSpool = true;
+        Outcome fast = drive(fastCfg, 16, true);
+        System.out.println(String.format(java.util.Locale.US,
+                "legacy: %d runs, 170 kPa reached at %.0f rpm | fast: %d runs, %d pushes, reached at %.0f rpm (best %.0f), P %s, window %.0f",
+                legacy.runs, legacy.finalReach, fast.runs, fast.pushes, fast.finalReach, fast.bestReach,
+                fast.plan.ecu.pid, fast.plan.ecu.closedLoopWindowKpa));
+        for (String l : fast.log) {
+            System.out.println(l);
+        }
+        assertEquals(0, legacy.pushes);
+        assertTrue(fast.pushes >= 1, "expected at least one spool push");
+        assertTrue(fast.runs <= 15, "fast spool took " + fast.runs + " runs");
+        assertTrue(fast.finalReach < legacy.finalReach - 100,
+                "fast spool should reach 170 kPa earlier: fast " + fast.finalReach + " vs legacy " + legacy.finalReach);
+        // the valve is held shut where 170 kPa is out of reach (1500 rpm: 105 kPa, 2500 rpm: 150 kPa capacity)
+        Grid bias = fast.plan.ecu.biasTable;
+        assertEquals(100, bias.get(0, 6), 1e-9);
+        assertTrue(bias.get(1, 6) >= 90, "2500 rpm / 170 kPa should stay (nearly) shut: " + bias.get(1, 6));
+        assertTrue(legacy.plan.ecu.biasTable.get(1, 6) < 100, "legacy keeps the extrapolated duty: " + legacy.plan.ecu.biasTable.get(1, 6));
+        // flat WOT target above the spool start (2300 rpm), wastegate pressure below it: no ramp cracks the valve open
+        Grid t = fast.plan.ecu.targetTable;
+        assertEquals(170, t.get(1, 7), 1e-9);
+        assertEquals(170, t.get(7, 7), 1e-9);
+        assertEquals(130, t.get(0, 7), 1e-9);
+        assertTrue(legacy.plan.ecu.targetTable.get(1, 7) < 170, "the ramp keeps 2500 rpm below the stage target");
+        // still a clean response at the end
+        for (ResponseMetrics m : fast.last.metrics) {
+            assertTrue(m.reached, m.summary());
+            assertTrue(m.overshootKpa <= fastCfg.overshootThresholdKpa * 1.6, m.summary());
+        }
+    }
+
+    @Test
+    void fastSpoolConvergesWithoutAClosedLoopWindowKnob() {
+        AutotuneConfig cfg = config();
+        cfg.fastSpool = true;
+        Outcome o = drive(cfg, 16, false);
+        System.out.println(String.format(java.util.Locale.US, "fast, no window knob: %d runs, %d pushes, 170 kPa reached at %.0f rpm, P %s",
+                o.runs, o.pushes, o.finalReach, o.plan.ecu.pid));
+        assertTrue(o.runs <= 16, "took " + o.runs + " runs");
+        assertTrue(o.finalReach < 3700, "170 kPa reached at " + o.finalReach + " rpm");
+        assertTrue(Double.isNaN(o.plan.ecu.closedLoopWindowKpa));
+        for (ResponseMetrics m : o.last.metrics) {
+            assertTrue(m.overshootKpa <= cfg.overshootThresholdKpa * 1.6, m.summary());
+        }
     }
 
     @Test

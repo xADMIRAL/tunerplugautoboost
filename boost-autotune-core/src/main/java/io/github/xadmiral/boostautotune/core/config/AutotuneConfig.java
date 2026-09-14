@@ -116,6 +116,30 @@ public final class AutotuneConfig {
     public double saturationDutyMarginPct = 1.5;
     public int minSaturatedSamples = 4;
 
+    // ---- Spool ----------------------------------------------------------------------------------
+    /**
+     * Tune for the fastest possible spool: the valve is held shut (max duty) wherever the target is
+     * out of reach, WOT targets are flat at the stage target above the spool-start RPM (no ramp
+     * that would crack the valve open early; below the ECU's closed-loop window the duty is the
+     * bias alone, so there is no wind-up), and once the loop is settled the spool trim, P and the
+     * closed-loop window are pushed one step at a time while the target keeps arriving earlier
+     * without overshoot.
+     */
+    public boolean fastSpool = true;
+    /** A bias cell whose estimate asks for at least this much duty is set to maximum duty (the valve is shut anyway). */
+    public double spoolShutDutyPct = 90;
+    /** A spool push is kept going only while the target arrives at least this many RPM earlier. */
+    public double spoolImproveRpm = 50;
+    /** Extra runs on the last stage spent pushing the spool (trim, feed-forward, P, window) once the loop is settled. */
+    public int maxSpoolPushesPerStage = 4;
+    /** Feed-forward raised above the steady duty around the RPM where the target arrives, per push. */
+    public double spoolBoostStepPct = 5;
+    /** Adjust the ECU's closed-loop activation window (MS3 "lower limit delta") when it is bound. */
+    public boolean tuneClosedLoopWindow = true;
+    public double windowStepKpa = 5;
+    public double windowMinKpa = 10;
+    public double windowMaxKpa = 60;
+
     // ---- Convergence ------------------------------------------------------------------------------
     /** Closed-loop runs per stage before the stage may be called converged. */
     public int runsRequiredPerStage = 2;
@@ -182,6 +206,15 @@ public final class AutotuneConfig {
         c.trimUnreachableTargets = trimUnreachableTargets;
         c.saturationDutyMarginPct = saturationDutyMarginPct;
         c.minSaturatedSamples = minSaturatedSamples;
+        c.fastSpool = fastSpool;
+        c.spoolShutDutyPct = spoolShutDutyPct;
+        c.spoolImproveRpm = spoolImproveRpm;
+        c.maxSpoolPushesPerStage = maxSpoolPushesPerStage;
+        c.spoolBoostStepPct = spoolBoostStepPct;
+        c.tuneClosedLoopWindow = tuneClosedLoopWindow;
+        c.windowStepKpa = windowStepKpa;
+        c.windowMinKpa = windowMinKpa;
+        c.windowMaxKpa = windowMaxKpa;
         c.runsRequiredPerStage = runsRequiredPerStage;
         c.biasSettledPct = biasSettledPct;
         c.autoEndRunIdleSec = autoEndRunIdleSec;
@@ -225,6 +258,12 @@ public final class AutotuneConfig {
         }
         if (characterizeStepPct <= 0) {
             problems.add("characterizeStepPct must be positive");
+        }
+        if (windowMinKpa >= windowMaxKpa || windowStepKpa <= 0) {
+            problems.add("Closed-loop window: min must be below max and the step positive");
+        }
+        if (spoolImproveRpm < 0 || maxSpoolPushesPerStage < 0) {
+            problems.add("Spool improvement threshold and push count must not be negative");
         }
         return problems;
     }

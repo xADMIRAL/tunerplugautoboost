@@ -19,11 +19,25 @@ public final class ResponseMetrics {
     public final double saturatedHighFraction;
     public final double saturatedLowFraction;
     public final int settledSamples;
+    /** Engine speed at which MAP first came within tolerance of the target; NaN when never. */
+    public final double reachRpm;
+    /** Seconds from the start of the pull (throttle opened) to that moment; NaN when never. */
+    public final double spoolSec;
 
     ResponseMetrics(Pull pull, boolean hasTarget, boolean reached, double targetKpa, double peakKpa,
                     double overshootKpa, double riseTimeSec, double steadyStateErrorKpa, double meanAbsErrorKpa,
                     double oscillationAmplitudeKpa, double oscillationCycles, double oscillationPeriodSec,
                     double saturatedHighFraction, double saturatedLowFraction, int settledSamples) {
+        this(pull, hasTarget, reached, targetKpa, peakKpa, overshootKpa, riseTimeSec, steadyStateErrorKpa, meanAbsErrorKpa,
+                oscillationAmplitudeKpa, oscillationCycles, oscillationPeriodSec, saturatedHighFraction, saturatedLowFraction,
+                settledSamples, Double.NaN, Double.NaN);
+    }
+
+    ResponseMetrics(Pull pull, boolean hasTarget, boolean reached, double targetKpa, double peakKpa,
+                    double overshootKpa, double riseTimeSec, double steadyStateErrorKpa, double meanAbsErrorKpa,
+                    double oscillationAmplitudeKpa, double oscillationCycles, double oscillationPeriodSec,
+                    double saturatedHighFraction, double saturatedLowFraction, int settledSamples,
+                    double reachRpm, double spoolSec) {
         this.pull = pull;
         this.hasTarget = hasTarget;
         this.reached = reached;
@@ -39,6 +53,8 @@ public final class ResponseMetrics {
         this.saturatedHighFraction = saturatedHighFraction;
         this.saturatedLowFraction = saturatedLowFraction;
         this.settledSamples = settledSamples;
+        this.reachRpm = reachRpm;
+        this.spoolSec = spoolSec;
     }
 
     public String summary() {
@@ -46,8 +62,10 @@ public final class ResponseMetrics {
             return "no closed-loop target during pull";
         }
         return String.format(Locale.US,
-                "target %.0f kPa, peak %.1f, %s, overshoot %.1f, rise %.2fs, ss err %+.1f, |err| %.1f, osc %.1f kPa x%.1f%s, sat hi %.0f%%",
-                targetKpa, peakKpa, reached ? "reached" : "NOT reached", overshootKpa, riseTimeSec,
+                "target %.0f kPa, peak %.1f, %s%s, overshoot %.1f, rise %.2fs, ss err %+.1f, |err| %.1f, osc %.1f kPa x%.1f%s, sat hi %.0f%%",
+                targetKpa, peakKpa, reached ? "reached" : "NOT reached",
+                Double.isNaN(reachRpm) ? "" : String.format(Locale.US, " at %.0f rpm / %.2fs after WOT", reachRpm, spoolSec),
+                overshootKpa, riseTimeSec,
                 steadyStateErrorKpa, meanAbsErrorKpa, oscillationAmplitudeKpa, oscillationCycles,
                 Double.isNaN(oscillationPeriodSec) ? "" : String.format(Locale.US, " (%.2fs)", oscillationPeriodSec),
                 saturatedHighFraction * 100);

@@ -38,6 +38,8 @@ class MainPanelHeadlessTest {
         assertEquals("advanceTable1", raw.getProperty("ecu.sparkTable"));
         assertEquals("3", raw.getProperty("ignsweep.maxAdvanceOverOriginalDeg"));
         assertEquals("135", raw.getProperty("als.targetKpa"));
+        assertEquals("true", raw.getProperty("tune.fastSpool"));
+        assertEquals("boost_ctl_lowerlimit", raw.getProperty("ecu.closedLoopWindowParam"));
         assertEquals("als_timing", raw.getProperty("ecu.alsTimingTable"));
         io.github.xadmiral.boostautotune.core.als.AlsConfig als = new io.github.xadmiral.boostautotune.core.als.AlsConfig();
         SettingsStore.alsFrom(als, raw, "als.");

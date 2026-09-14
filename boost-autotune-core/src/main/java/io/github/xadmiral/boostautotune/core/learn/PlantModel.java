@@ -73,20 +73,25 @@ public final class PlantModel {
     }
 
     /** Adds an observation, splitting its weight between the two neighbouring RPM columns. */
+    /**
+     * Below this share an observation is not split into the farther column: the turbo's capacity
+     * changes a lot between columns while spooling, and smearing observations across them makes a
+     * low column believe it can deliver what only its neighbour can.
+     */
+    static final double MIN_SPLIT_WEIGHT = 0.35;
+
     public void addObservation(double rpm, double duty, double boost, double weight) {
         if (weight <= 0 || !Stats.finite(duty) || !Stats.finite(boost)) {
             return;
         }
         Axis.Pos p = rpmAxis.locate(rpm);
-        if (p.i0 == p.i1) {
+        if (p.i0 == p.i1 || p.w1 < MIN_SPLIT_WEIGHT) {
             columns.get(p.i0).add(new Obs(duty, boost, weight));
+        } else if (p.w0() < MIN_SPLIT_WEIGHT) {
+            columns.get(p.i1).add(new Obs(duty, boost, weight));
         } else {
-            if (p.w0() > 0.02) {
-                columns.get(p.i0).add(new Obs(duty, boost, weight * p.w0()));
-            }
-            if (p.w1 > 0.02) {
-                columns.get(p.i1).add(new Obs(duty, boost, weight * p.w1));
-            }
+            columns.get(p.i0).add(new Obs(duty, boost, weight * p.w0()));
+            columns.get(p.i1).add(new Obs(duty, boost, weight * p.w1));
         }
     }
 
@@ -101,10 +106,12 @@ public final class PlantModel {
     public List<Integer> columnsFor(double rpm) {
         List<Integer> out = new ArrayList<Integer>();
         Axis.Pos p = rpmAxis.locate(rpm);
-        if (p.i0 == p.i1 || p.w0() > 0.02) {
+        if (p.i0 == p.i1 || p.w1 < MIN_SPLIT_WEIGHT) {
             out.add(p.i0);
-        }
-        if (p.i0 != p.i1 && p.w1 > 0.02) {
+        } else if (p.w0() < MIN_SPLIT_WEIGHT) {
+            out.add(p.i1);
+        } else {
+            out.add(p.i0);
             out.add(p.i1);
         }
         return out;
@@ -279,9 +286,10 @@ public final class PlantModel {
                         ? DutyEstimate.Quality.MEASURED : DutyEstimate.Quality.INTERPOLATED;
             }
         }
+        double raw = duty;
         duty = Math.min(duty, last.duty + maxExtrapolationPct);
         duty = Stats.clamp(duty, minDuty, maxDuty);
-        return new DutyEstimate(duty, q, saturated);
+        return new DutyEstimate(duty, q, saturated, raw);
     }
 
     /** Boost expected at {@code duty} in a column; NaN without data. Extrapolates conservatively (predicts more boost). */
@@ -313,6 +321,12 @@ public final class PlantModel {
             }
         }
         return last.boost;
+    }
+
+    /** Boost seen at the highest duty tried in a column (the valve as shut as it has been); NaN without data. */
+    public double maxObservedBoost(int col) {
+        List<Pt> pts = curve(col);
+        return pts.isEmpty() ? Double.NaN : pts.get(pts.size() - 1).boost;
     }
 
     /** Highest predicted boost over all columns that have data; NaN when the model is empty. */

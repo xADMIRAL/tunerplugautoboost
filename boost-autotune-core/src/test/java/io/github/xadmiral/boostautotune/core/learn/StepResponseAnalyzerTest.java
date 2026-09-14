@@ -91,4 +91,23 @@ class StepResponseAnalyzerTest {
         ResponseMetrics m = StepResponseAnalyzer.analyze(p, cfg(), 0, 100);
         assertFalse(m.hasTarget);
     }
+
+    @Test
+    void reportsWhereAndWhenTheTargetArrived() {
+        Pull p = pull(4, 160, new MapFn() {
+            public double map(double t) { return 160 - 60 * Math.exp(-t / 0.4); }
+        }, 50);
+        ResponseMetrics m = StepResponseAnalyzer.analyze(p, cfg(), 0, 100);
+        assertTrue(m.reached);
+        // MAP passes 155 kPa at t = 0.4 * ln(12) = 0.99 s; rpm = 3000 + 800 t
+        assertEquals(0.99, m.spoolSec, 0.06);
+        assertEquals(3000 + 800 * 0.99, m.reachRpm, 60);
+        assertTrue(m.summary().contains("after WOT"));
+        // the fixed-target helper used for the open-loop reference agrees
+        double[] r = StepResponseAnalyzer.reach(p, 160, 5, 1800);
+        assertNotNull(r);
+        assertEquals(m.reachRpm, r[0], 1e-9);
+        assertEquals(m.spoolSec, r[1], 1e-9);
+        assertNull(StepResponseAnalyzer.reach(p, 190, 5, 1800));
+    }
 }

@@ -48,6 +48,7 @@ public final class SimEcuPort implements EcuPort {
         scalars.put(b.minDuty, 0.0);
         scalars.put(b.maxDuty, 100.0);
         scalars.put(b.overboostLimit, 210.0);
+        scalars.put(b.closedLoopWindowParam, 30.0);
         options.put(b.modeParam, "Open-loop");
         options.put(b.enableParam, "Off");
         options.put(b.closedLoopExtraParam, "Basic Mode");
@@ -146,6 +147,7 @@ public final class SimEcuPort implements EcuPort {
         s.pid = new PidGains(scalars.get(b.pidP), scalars.get(b.pidI), scalars.get(b.pidD));
         s.minDuty = scalars.get(b.minDuty);
         s.maxDuty = scalars.get(b.maxDuty);
+        s.closedLoopWindowKpa = scalars.containsKey(b.closedLoopWindowParam) ? scalars.get(b.closedLoopWindowParam) : Double.NaN;
         s.closedLoop = "Closed-loop".equals(options.get(b.modeParam));
         return s;
     }
@@ -215,8 +217,9 @@ public final class SimEcuPort implements EcuPort {
         }
         if (scalars.containsKey(name)) {
             double max = name.contains("Kp") || name.contains("Ki") || name.contains("Kd") ? 200 : name.equals("als_iac_steps") ? 255
-                    : name.contains("rpm") || name.contains("_arm") || name.contains("_hrd") || name.contains("_lim") ? 25000 : 100;
-            double min = name.equals("flats_deg") ? -90 : 0;
+                    : name.contains("rpm") || name.contains("_arm") || name.contains("_hrd") || name.contains("_lim") ? 25000
+                    : name.equals("boost_ctl_lowerlimit") ? 200 : 100;
+            double min = name.equals("flats_deg") ? -90 : name.equals("boost_ctl_lowerlimit") ? 5 : 0;
             return new ParamInfo("scalar", "", min, max, name.equals("als_iac_steps") ? 0 : 1, 1, 1, Collections.<String>emptyList());
         }
         if (options.containsKey(name)) {

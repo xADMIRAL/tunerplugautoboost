@@ -15,6 +15,7 @@ class TargetTableBuilderTest {
     @Test
     void rampsFromWastegateToTargetAndKeepsPartThrottleWhenAsked() {
         AutotuneConfig cfg = new AutotuneConfig();
+        cfg.fastSpool = false; // classic RPM ramp
         cfg.wastegateKpa = 130;
         cfg.spoolStartRpm = 2500;
         cfg.fullTargetRpm = 3500;
@@ -66,5 +67,30 @@ class TargetTableBuilderTest {
         assertEquals(35, g.get(0, 2), 1e-9);
         assertEquals(35, g.get(1, 3), 1e-9);
         assertEquals(7, g.get(1, 1), 1e-9);
+    }
+
+    @Test
+    void fastSpoolUsesAFlatTargetAboveTheSpoolStart() {
+        AutotuneConfig cfg = new AutotuneConfig();
+        cfg.wastegateKpa = 130;
+        cfg.spoolStartRpm = 2500;
+        cfg.fullTargetRpm = 4500;
+        cfg.wotLoadThreshold = 80;
+        cfg.scalePartThrottleRows = false;
+        cfg.fastSpool = true;
+        Grid g = TargetTableBuilder.build(ecuTargets(), 160, cfg, 400);
+        assertEquals(130, g.get(0, 3), 1e-9);  // up to the spool start: wastegate pressure
+        assertEquals(130, g.get(1, 3), 1e-9);
+        assertEquals(160, g.get(2, 3), 1e-9);  // no ramp: the stage target right away (fullTargetRpm ignored)
+        assertEquals(160, g.get(3, 3), 1e-9);
+        assertEquals(100, g.get(4, 1), 1e-9);  // part throttle untouched
+        cfg.spoolStartRpm = 0;
+        assertEquals(160, TargetTableBuilder.build(ecuTargets(), 160, cfg, 400).get(0, 3), 1e-9);
+        // the classic ramp is still there when fast spool is off
+        cfg.fastSpool = false;
+        cfg.spoolStartRpm = 2500;
+        Grid legacy = TargetTableBuilder.build(ecuTargets(), 160, cfg, 400);
+        assertEquals(130, legacy.get(1, 3), 1e-9);
+        assertEquals(145, legacy.get(2, 3), 1e-9);
     }
 }

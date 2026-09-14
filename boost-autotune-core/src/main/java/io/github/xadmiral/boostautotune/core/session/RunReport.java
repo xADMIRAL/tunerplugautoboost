@@ -26,6 +26,16 @@ public final class RunReport {
     public double plantGainKpaPerPct = Double.NaN;
     public boolean stageConverged;
     public boolean sessionDone;
+    /** Closed loop: median RPM / seconds after WOT at which the target was reached; NaN when unknown. */
+    public double spoolReachRpm = Double.NaN;
+    public double spoolReachSec = Double.NaN;
+    /** Earliest reach seen in this stage so far (this run included); NaN when unknown. */
+    public double spoolBestRpm = Double.NaN;
+    /** Open-loop reference: reach at the highest characterization duty; NaN when unknown. */
+    public double spoolOpenLoopRpm = Double.NaN;
+    public double spoolOpenLoopSec = Double.NaN;
+    /** Spool push applied for the next run (trim / P / window), or null. */
+    public String spoolPush;
     public RunPlan nextPlan;
 
     RunReport(RunPlan plan) {

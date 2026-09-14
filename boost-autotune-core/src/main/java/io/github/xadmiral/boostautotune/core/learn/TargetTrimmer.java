@@ -29,6 +29,15 @@ public final class TargetTrimmer {
     }
 
     public static Result trim(Grid targets, LoadSource loadSource, List<Pull> pulls, AutotuneConfig cfg, double maxDuty) {
+        return trim(targets, loadSource, pulls, cfg, maxDuty, Double.NaN);
+    }
+
+    /**
+     * @param stageTarget with {@link AutotuneConfig#fastSpool}, WOT cells already below the stage target
+     *                    follow the measured achievable boost on purpose and are not trimmed further
+     */
+    public static Result trim(Grid targets, LoadSource loadSource, List<Pull> pulls, AutotuneConfig cfg, double maxDuty,
+                              double stageTarget) {
         Result r = new Result(targets.copy());
         if (!cfg.trimUnreachableTargets) {
             return r;
@@ -62,6 +71,9 @@ public final class TargetTrimmer {
                 }
                 double achieved = sumMap[yi][xi] / n[yi][xi];
                 double old = targets.get(xi, yi);
+                if (cfg.fastSpool && !Double.isNaN(stageTarget) && load.bin(yi) >= cfg.wotLoadThreshold && old < stageTarget - 0.5) {
+                    continue; // spool column: target already sits on the achievable boost
+                }
                 double nv = Math.max(cfg.wastegateKpa, Math.floor(achieved - 2));
                 if (nv < old - 1) {
                     r.grid.set(xi, yi, nv);

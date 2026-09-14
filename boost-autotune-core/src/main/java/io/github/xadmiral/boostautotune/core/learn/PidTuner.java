@@ -46,6 +46,7 @@ public final class PidTuner {
         List<Double> ovs = new ArrayList<Double>();
         List<Double> osc = new ArrayList<Double>();
         List<Double> cycles = new ArrayList<Double>();
+        List<Double> periods = new ArrayList<Double>();
         List<Double> ss = new ArrayList<Double>();
         List<Double> absSs = new ArrayList<Double>();
         List<Double> rise = new ArrayList<Double>();
@@ -60,6 +61,9 @@ public final class PidTuner {
             ovs.add(m.overshootKpa);
             osc.add(m.oscillationAmplitudeKpa);
             cycles.add(m.oscillationCycles);
+            if (Stats.finite(m.oscillationPeriodSec)) {
+                periods.add(m.oscillationPeriodSec);
+            }
             if (Stats.finite(m.steadyStateErrorKpa)) {
                 ss.add(m.steadyStateErrorKpa);
                 absSs.add(Math.abs(m.steadyStateErrorKpa));
@@ -93,7 +97,9 @@ public final class PidTuner {
             double ssMed = Stats.median(ss);
             double absSsMed = absSs.isEmpty() ? 0 : Stats.median(absSs);
             double riseMed = rise.isEmpty() ? 0 : Stats.median(rise);
-            boolean transientOnly = cycMax <= 0.5;
+            // half a cycle is the bump itself; one slow cycle (> 1.5 s) is the bump plus the settling after it
+            double slowestPeriod = periods.isEmpty() ? Double.NaN : Stats.max(periods);
+            boolean transientOnly = cycMax <= 0.5 || (cycMax <= 1.0 && Stats.finite(slowestPeriod) && slowestPeriod > 1.5);
             if (oscMax >= oscLimit && cycMax >= 1.5) {
                 if (cfg.tuneP) {
                     p *= 1 - step;

@@ -17,6 +17,15 @@ public final class BiasTableBuilder {
 
     public static BiasBuildResult build(Grid existing, PlantModel model, AutotuneConfig cfg,
                                         double minDuty, double maxDuty, boolean unlimitedAuthority) {
+        return build(existing, model, cfg, minDuty, maxDuty, unlimitedAuthority, null);
+    }
+
+    /**
+     * @param shutAbove per RPM column, the boost seen with the valve shut (NaN = unknown). With
+     *                  {@link AutotuneConfig#fastSpool} every target row at or above it gets maximum duty.
+     */
+    public static BiasBuildResult build(Grid existing, PlantModel model, AutotuneConfig cfg,
+                                        double minDuty, double maxDuty, boolean unlimitedAuthority, double[] shutAbove) {
         Axis rpm = existing.xAxis();
         Axis targets = existing.yAxis();
         if (rpm.size() != model.rpmAxis().size()) {
@@ -53,18 +62,21 @@ public final class BiasTableBuilder {
             }
             for (int yi = 0; yi < targets.size(); yi++) {
                 double v;
+                double raw;
                 boolean sat;
                 if (left >= 0 && right >= 0) {
                     double span = rpm.bin(right) - rpm.bin(left);
                     double t = span <= 0 ? 0 : (rpm.bin(xi) - rpm.bin(left)) / span;
                     v = Stats.lerp(est[yi][left].duty, est[yi][right].duty, t);
+                    raw = Stats.lerp(est[yi][left].rawDuty, est[yi][right].rawDuty, t);
                     sat = est[yi][left].saturated && est[yi][right].saturated;
                 } else {
                     DutyEstimate src = left >= 0 ? est[yi][left] : est[yi][right];
                     v = src.duty;
+                    raw = src.rawDuty;
                     sat = src.saturated;
                 }
-                est[yi][xi] = new DutyEstimate(v, DutyEstimate.Quality.BORROWED, sat);
+                est[yi][xi] = new DutyEstimate(v, DutyEstimate.Quality.BORROWED, sat, raw);
             }
         }
         // 3. write with authority
@@ -81,7 +93,13 @@ public final class BiasTableBuilder {
                 }
                 double old = existing.get(xi, yi);
                 double v = e.duty;
-                if (!unlimitedAuthority) {
+                boolean shutValve = cfg.fastSpool && (e.outOfReach(Math.min(maxDuty, cfg.spoolShutDutyPct))
+                        || (shutAbove != null && xi < shutAbove.length && Stats.finite(shutAbove[xi])
+                        && targets.bin(yi) >= shutAbove[xi] - 2));
+                if (shutValve) {
+                    // the turbo cannot deliver this target here: hold the valve shut for the fastest spool
+                    v = maxDuty;
+                } else if (!unlimitedAuthority) {
                     v = Stats.clamp(v, old - cfg.biasMaxStepPct, old + cfg.biasMaxStepPct);
                 }
                 v = Stats.clamp(v, minDuty, maxDuty);
