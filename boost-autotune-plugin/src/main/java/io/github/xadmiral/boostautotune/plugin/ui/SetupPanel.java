@@ -131,6 +131,13 @@ public final class SetupPanel extends JPanel {
     private List<String> channels = new ArrayList<String>();
     private List<String> params = new ArrayList<String>();
     private final Runnable onChanged;
+    private JPanel top;
+
+    /** Adds a control to the row of buttons at the top (the main panel puts the text size choice there). */
+    public void addTopControl(java.awt.Component c) {
+        top.add(c);
+        top.revalidate();
+    }
 
     public SetupPanel(EcuBinding binding, EcuPort port, Runnable onChanged) {
         super(new BorderLayout(6, 6));
@@ -139,7 +146,7 @@ public final class SetupPanel extends JPanel {
         this.onChanged = onChanged;
         setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        top = new JPanel(new FlowLayout(FlowLayout.LEFT));
         top.add(new JLabel("ECU configuration:"));
         top.add(configCombo);
         top.add(new JLabel("Preset:"));

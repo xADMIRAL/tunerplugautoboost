@@ -62,6 +62,13 @@ public final class AnalysisPanel extends JPanel {
     /** Rebuilds the tables and text from the controller's current driver. */
     public void refresh() {
         tables.removeAll();
+        refreshTables();
+        Fonts.apply(tables, Fonts.current());
+        tables.revalidate();
+        tables.repaint();
+    }
+
+    private void refreshTables() {
         List<TableView> views = ctl.tables();
         tables.setLayout(new GridLayout(1, Math.max(1, views.size()), 6, 6));
         for (TableView v : views) {

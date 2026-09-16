@@ -24,6 +24,19 @@ class MainPanelHeadlessTest {
         });
         MainPanel p = holder[0];
         assertNotNull(p.controller().port());
+        // text is scaled up by default, from every component's own base font, and the choice is remembered
+        assertEquals(1.25, p.fontScale(), 1e-9);
+        javax.swing.JLabel probe = new javax.swing.JLabel("x");
+        float base = probe.getFont().getSize2D();
+        assertEquals(Math.round(base * 1.25), Math.round(p.autotunePanel().getFont().getSize2D()));
+        SwingUtilities.invokeAndWait(new Runnable() {
+            public void run() {
+                holder[0].setFontScale(1.5);
+                holder[0].setFontScale(1.5); // applying twice must not compound
+            }
+        });
+        assertEquals(Math.round(base * 1.5), Math.round(p.autotunePanel().getFont().getSize2D()));
+        assertEquals("150 %", new SettingsStore(f).loadRaw().getProperty("ui.fontScale"), "text size is remembered right away");
         assertEquals("boost_ctl_load_targets", p.binding().targetTable);
         p.config().targetStagesKpa.add(175.0);
         p.ignitionSweepConfig().maxAdvanceOverOriginalDeg = 3;

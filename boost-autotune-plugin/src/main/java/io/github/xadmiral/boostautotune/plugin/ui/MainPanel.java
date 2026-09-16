@@ -42,6 +42,9 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
     private final AnalysisPanel analysis;
     private final LogPanel logPanel = new LogPanel();
     private final JTabbedPane tabs = new JTabbedPane();
+    private final Properties uiPrefs = new Properties();
+    private double fontScale = Fonts.DEFAULT_SCALE;
+    private final javax.swing.JComboBox<String> textSize = new javax.swing.JComboBox<String>(Fonts.CHOICES);
 
     public MainPanel(EcuPort port, SettingsStore store) {
         super(new BorderLayout());
@@ -49,7 +52,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
         if (store != null && store.exists()) {
             try {
-                store.load(cfg, vvtSweep, ignSweep, vvtPid, als, b, new Properties());
+                store.load(cfg, vvtSweep, ignSweep, vvtPid, als, b, uiPrefs);
             } catch (IOException e) {
                 b = EcuPresets.create(EcuPresets.STEALTH_PCM);
             }
@@ -95,6 +98,22 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         tabs.addTab("Analysis", analysis);
         tabs.addTab("Log", logPanel);
         add(tabs, BorderLayout.CENTER);
+        // text size: the whole plugin is scaled from the components' own fonts, the host application is untouched
+        fontScale = Fonts.parse(uiPrefs.getProperty("fontScale", Fonts.choiceFor(Fonts.DEFAULT_SCALE)));
+        textSize.setSelectedItem(Fonts.choiceFor(fontScale));
+        JPanel sizeRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 0));
+        sizeRow.add(new javax.swing.JLabel("  Text size:"));
+        sizeRow.add(textSize);
+        setup.addTopControl(sizeRow);
+        textSize.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                Object sel = textSize.getSelectedItem();
+                if (sel != null) {
+                    setFontScale(Fonts.parse(sel.toString()));
+                }
+            }
+        });
+        applyFontScale();
         logPanel.append("Boost Autotune ready. ECU: " + (port == null ? "none" : port.signature()));
         if (store != null) {
             logPanel.append("Settings file: " + store.file());
@@ -137,12 +156,31 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         return autotune;
     }
 
+    public double fontScale() {
+        return fontScale;
+    }
+
+    /** Changes the text size of the whole plugin and remembers it. */
+    public void setFontScale(double scale) {
+        fontScale = scale;
+        applyFontScale();
+        saveSettings();
+    }
+
+    private void applyFontScale() {
+        Fonts.setCurrent(fontScale);
+        Fonts.apply(this, fontScale);
+        revalidate();
+        repaint();
+    }
+
     private void saveSettings() {
         if (store == null) {
             return;
         }
         try {
-            store.save(cfg, vvtSweep, ignSweep, vvtPid, als, binding, new Properties());
+            uiPrefs.setProperty("fontScale", Fonts.choiceFor(fontScale));
+            store.save(cfg, vvtSweep, ignSweep, vvtPid, als, binding, uiPrefs);
         } catch (IOException e) {
             logPanel.append("Could not save settings: " + e.getMessage());
         }
