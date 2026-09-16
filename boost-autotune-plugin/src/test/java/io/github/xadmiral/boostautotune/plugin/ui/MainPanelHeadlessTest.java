@@ -38,6 +38,9 @@ class MainPanelHeadlessTest {
         assertEquals("advanceTable1", raw.getProperty("ecu.sparkTable"));
         assertEquals("3", raw.getProperty("ignsweep.maxAdvanceOverOriginalDeg"));
         assertEquals("135", raw.getProperty("als.targetKpa"));
+        assertEquals("3000", raw.getProperty("als.holdRpm"));
+        assertEquals("3", raw.getProperty("als.holdSec"));
+        assertFalse(p.antilagPanel().advancedShown());
         assertEquals("true", raw.getProperty("tune.fastSpool"));
         assertEquals("boost_ctl_lowerlimit", raw.getProperty("ecu.closedLoopWindowParam"));
         assertEquals("als_timing", raw.getProperty("ecu.alsTimingTable"));

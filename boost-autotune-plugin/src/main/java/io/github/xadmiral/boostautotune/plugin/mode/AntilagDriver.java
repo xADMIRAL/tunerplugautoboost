@@ -20,6 +20,8 @@ public final class AntilagDriver implements ModeDriver {
     private final AlsSession session;
     private final Grid originalTiming;
     private final double originalAir;
+    private final double originalMaxTime;
+    private final double originalMinRpm;
     private final String originalEnable;
     private final List<String> startupLog = new ArrayList<String>();
     private double runPeak = Double.NaN;
@@ -41,6 +43,8 @@ public final class AntilagDriver implements ModeDriver {
         }
         originalTiming = timing.copy();
         originalAir = air;
+        originalMaxTime = adapter.readAlsMaxTime();
+        originalMinRpm = adapter.readAlsMinRpm();
         originalEnable = adapter.readAlsEnable();
         if (originalEnable != null && adapter.binding().alsDisableOption.equalsIgnoreCase(originalEnable.trim())) {
             startupLog.add("WARNING: the anti-lag is switched off in the ECU (" + adapter.binding().alsEnableParam + " = "
@@ -48,8 +52,12 @@ public final class AntilagDriver implements ModeDriver {
         }
         session = new AlsSession(c);
         session.initialize(timing, air);
-        startupLog.add(String.format(Locale.US, "Anti-lag target %.0f kPa off throttle (+/- %.0f), timing %.0f..%.0f deg, idle valve %s %.0f..%.0f",
-                c.targetKpa, c.tolKpa, c.minTimingDeg, c.maxTimingDeg, adapter.alsAirParam(), c.airMin, c.airMax));
+        startupLog.add(String.format(Locale.US, "Anti-lag target %.0f kPa off throttle (+/- %.0f), hold >= %.0f rpm for %.0f s; timing %.0f..%.0f deg, idle valve %s %.0f..%.0f",
+                c.targetKpa, c.tolKpa, c.holdRpm, c.holdSec, c.minTimingDeg, c.maxTimingDeg, adapter.alsAirParam(), c.airMin, c.airMax));
+        if (adapter.binding().has(adapter.binding().alsMaxTimeParam)) {
+            startupLog.add(String.format(Locale.US, "%s will be set to %.0f s and %s to %.0f rpm with the first plan",
+                    adapter.binding().alsMaxTimeParam, c.holdSec, adapter.binding().alsMinRpmParam, c.ecuMinRpm()));
+        }
         startupLog.add(String.format(Locale.US, "Guards: MAT warn %.0f / abort %.0f C, stall %.0f rpm, max %.0f s ALS per run",
                 c.maxMatC, c.abortMatC, c.stallRpm, c.maxActiveSecPerRun));
         startupLog.add("First plan: " + session.plan().title());
@@ -103,12 +111,18 @@ public final class AntilagDriver implements ModeDriver {
         adapter.writeAlsAir(air);
     }
 
+    private void writeHold(double sec, double minRpm) throws EcuException {
+        adapter.writeAlsMaxTime(sec);
+        adapter.writeAlsMinRpm(minRpm);
+    }
+
     @Override
     public void writePlan() throws EcuException {
         if (session.plan() == null) {
             throw new EcuException("No plan to write");
         }
         write(session.plan().timing, session.plan().air);
+        writeHold(session.plan().holdSec, session.plan().ecuMinRpm);
     }
 
     @Override
@@ -143,6 +157,7 @@ public final class AntilagDriver implements ModeDriver {
         }
         AlsSession.Plan plan = session.commit(r);
         write(plan.timing, plan.air);
+        writeHold(plan.holdSec, plan.ecuMinRpm);
     }
 
     @Override
@@ -158,6 +173,7 @@ public final class AntilagDriver implements ModeDriver {
     @Override
     public void restoreOriginal() throws EcuException {
         write(originalTiming, originalAir);
+        writeHold(originalMaxTime, originalMinRpm);
         adapter.writeAlsEnable(originalEnable);
         if (session.state() != SessionState.DONE) {
             session.abort("Original anti-lag settings restored by user");
@@ -168,6 +184,7 @@ public final class AntilagDriver implements ModeDriver {
     @Override
     public void writeSafeState() throws EcuException {
         write(originalTiming, originalAir);
+        writeHold(originalMaxTime, originalMinRpm);
         if (adapter.binding().has(adapter.binding().alsDisableOption)) {
             adapter.writeAlsEnable(adapter.binding().alsDisableOption);
         }

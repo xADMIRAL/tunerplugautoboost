@@ -104,6 +104,9 @@ public final class AntilagPanel extends JPanel {
     private final Runnable onChanged;
     private final Log log;
     private final Form form = new Form();
+    private final Form goals = new Form();
+    private final JCheckBox advanced = new JCheckBox("Advanced settings", false);
+    private JScrollPane advancedScroll;
     private final JComboBox<String> presetCombo = new JComboBox<String>();
     private final JCheckBox groupAls = new JCheckBox(AntilagPresets.GROUP_ALS, true);
     private final JCheckBox groupFlat = new JCheckBox(AntilagPresets.GROUP_FLATSHIFT, true);
@@ -126,13 +129,14 @@ public final class AntilagPanel extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
         JTextArea intro = new JTextArea(
-                "Drift presets write the MS3 anti-lag (ALS), flat shift and over-run settings in one go; untick a group to "
-                        + "leave it alone, edit any value before writing (e.g. the ALS switch input pin). The plugin keeps the old "
-                        + "values for 'Restore original'; burn in TunerStudio when happy.\n"
-                        + "Anti-lag autotune: with the anti-lag on, do full lifts from WOT (arm above the ALS TPS, then close the "
-                        + "throttle for 2-3 s). Per RPM column the plugin retards the ALS timing until the off-throttle boost "
-                        + "reaches the target, then adds idle-valve air if the retard limit is hit. Anti-lag cooks the turbo and "
-                        + "the manifold: keep runs short, watch MAT and do cool-down laps between runs.");
+                "Pick a drift mode (light / medium / hard): it fills the MS3 anti-lag (ALS), flat shift and over-run settings "
+                        + "below and the three autotune goals. Untick a group to leave it alone, edit any value before writing "
+                        + "(e.g. the ALS switch input pin). The plugin keeps the old values for 'Restore original'; burn in "
+                        + "TunerStudio when happy.\n"
+                        + "Autotune: with the anti-lag on, do full lifts from WOT and hold the throttle closed for the hold time. "
+                        + "Ignition retard is tuned per RPM for the boost you want off throttle, idle-valve air so the engine "
+                        + "does not fall below the RPM you want, and the ECU's anti-lag time is set to the seconds you want. "
+                        + "Anti-lag cooks the turbo and the manifold: short runs, watch MAT, cool-down laps between runs.");
         intro.setEditable(false);
         intro.setLineWrap(true);
         intro.setWrapStyleWord(true);
@@ -141,15 +145,15 @@ public final class AntilagPanel extends JPanel {
 
         // ---- presets ----
         JPanel presets = new JPanel(new BorderLayout(4, 4));
-        presets.setBorder(BorderFactory.createTitledBorder("Drift / anti-lag presets (MS3 parameter names)"));
+        presets.setBorder(BorderFactory.createTitledBorder("Drift mode: ECU settings to write (MS3 parameter names)"));
         JPanel presetRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        presetRow.add(new JLabel("Preset:"));
+        presetRow.add(new JLabel("Drift mode:"));
         for (String n : AntilagPresets.names()) {
             presetCombo.addItem(n);
         }
-        presetCombo.setSelectedItem(AntilagPresets.DRIFT_MILD);
+        presetCombo.setSelectedItem(AntilagPresets.DRIFT_MEDIUM);
         presetRow.add(presetCombo);
-        JButton loadBtn = new JButton("Load preset");
+        JButton loadBtn = new JButton("Load mode");
         presetRow.add(loadBtn);
         presetRow.add(new JLabel("  Write groups:"));
         presetRow.add(groupAls);
@@ -175,13 +179,22 @@ public final class AntilagPanel extends JPanel {
 
         // ---- autotune settings ----
         JPanel tune = new JPanel(new BorderLayout(4, 4));
-        tune.setBorder(BorderFactory.createTitledBorder("Anti-lag autotune"));
-        form.section("Goal");
-        form.addDouble("Off-throttle boost target, kPa (absolute)", "Manifold pressure to hold while the anti-lag is active and the throttle is closed",
+        tune.setBorder(BorderFactory.createTitledBorder("Anti-lag autotune: what you want"));
+        goals.addDouble("Boost off throttle, kPa (absolute)", "Manifold pressure to hold while the anti-lag is active and the throttle is closed; tuned with ignition retard per RPM",
                 new Form.DoubleGet() { public double get() { return cfg.targetKpa; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.targetKpa = v; } });
-        form.addDouble("Tolerance, kPa", "", new Form.DoubleGet() { public double get() { return cfg.tolKpa; } },
+        goals.addDouble("Do not let RPM fall below", "The anti-lag holds the engine at or above this off throttle; tuned with idle-valve air",
+                new Form.DoubleGet() { public double get() { return cfg.holdRpm; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.holdRpm = v; } });
+        goals.addDouble("Hold for, s", "Seconds one activation may hold boost and RPM (written to the ECU's anti-lag time)",
+                new Form.DoubleGet() { public double get() { return cfg.holdSec; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.holdSec = v; } });
+
+        form.section("Tolerances");
+        form.addDouble("Boost tolerance, kPa", "", new Form.DoubleGet() { public double get() { return cfg.tolKpa; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.tolKpa = v; } });
+        form.addDouble("RPM tolerance", "", new Form.DoubleGet() { public double get() { return cfg.holdTolRpm; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.holdTolRpm = v; } });
         form.addDouble("Good runs required", "", new Form.DoubleGet() { public double get() { return cfg.runsRequired; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.runsRequired = (int) Math.max(1, v); } });
         form.section("Event detection");
@@ -211,7 +224,7 @@ public final class AntilagPanel extends JPanel {
                 new Form.DoubleSet() { public void set(double v) { cfg.maxTimingDeg = v; } });
         form.addDouble("Change rows with TPS bin at or below", "", new Form.DoubleGet() { public double get() { return cfg.maxRowTps; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.maxRowTps = v; } });
-        form.addBool("Also tune idle valve air", "Second knob once a column is at the retard limit",
+        form.addBool("Tune idle valve air for the RPM hold", "Off = the air stays as it is and only the timing is tuned",
                 new Form.BoolGet() { public boolean get() { return cfg.tuneAir; } },
                 new Form.BoolSet() { public void set(boolean v) { cfg.tuneAir = v; } });
         form.addDouble("Air step per run (steps or % duty)", "", new Form.DoubleGet() { public double get() { return cfg.airStep; } },
@@ -242,15 +255,29 @@ public final class AntilagPanel extends JPanel {
                 new Form.DoubleSet() { public void set(double v) { cfg.respoolMaxSec = v; } });
         form.addDouble("Auto end run after idle, s", "0 = manual", new Form.DoubleGet() { public double get() { return cfg.autoEndRunIdleSec; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.autoEndRunIdleSec = v; } });
-        tune.add(new JScrollPane(form.panel()), BorderLayout.CENTER);
+        JPanel goalsPanel = new JPanel(new BorderLayout());
+        goalsPanel.add(goals.panel(), BorderLayout.NORTH);
+        JPanel advancedRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        advancedRow.add(advanced);
+        goalsPanel.add(advancedRow, BorderLayout.SOUTH);
+        tune.add(goalsPanel, BorderLayout.NORTH);
+        advancedScroll = new JScrollPane(form.panel());
+        advancedScroll.setVisible(false);
+        tune.add(advancedScroll, BorderLayout.CENTER);
         JPanel tuneButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton applyBtn = new JButton("Apply");
         tuneButtons.add(applyBtn);
         tuneButtons.add(status);
         tune.add(tuneButtons, BorderLayout.SOUTH);
+        advanced.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                advancedScroll.setVisible(advanced.isSelected());
+                tune.revalidate();
+            }
+        });
 
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, presets, tune);
-        split.setResizeWeight(0.55);
+        split.setResizeWeight(0.6);
         add(split, BorderLayout.CENTER);
 
         loadBtn.addActionListener(new ActionListener() {
@@ -279,7 +306,8 @@ public final class AntilagPanel extends JPanel {
             }
         });
         form.refresh();
-        loadPreset(AntilagPresets.DRIFT_MILD);
+        goals.refresh();
+        loadPreset(AntilagPresets.DRIFT_MEDIUM);
     }
 
     // ---- presets ------------------------------------------------------------------------------
@@ -290,7 +318,15 @@ public final class AntilagPanel extends JPanel {
             model.rows.add(new Row(s));
         }
         model.fireTableDataChanged();
-        presetStatus.setText("Preset '" + name + "' loaded, nothing written yet.");
+        AntilagPresets.Goals g = AntilagPresets.goals(name);
+        if (g != null) {
+            g.applyTo(cfg);
+            goals.refresh();
+            status.setText(String.format(java.util.Locale.US, "Goals from '%s': %.0f kPa, hold >= %.0f rpm for %.0f s",
+                    name, g.targetKpa, g.holdRpm, g.holdSec));
+            onChanged.run();
+        }
+        presetStatus.setText("Mode '" + name + "' loaded, nothing written yet.");
         readCurrent(false);
     }
 
@@ -448,6 +484,7 @@ public final class AntilagPanel extends JPanel {
 
     public boolean apply() {
         try {
+            goals.apply();
             form.apply();
         } catch (IllegalArgumentException e) {
             status.setText(e.getMessage());
@@ -464,6 +501,11 @@ public final class AntilagPanel extends JPanel {
     }
 
     public void refresh() {
+        goals.refresh();
         form.refresh();
+    }
+
+    public boolean advancedShown() {
+        return advanced.isSelected();
     }
 }

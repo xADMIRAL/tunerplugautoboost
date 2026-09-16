@@ -104,6 +104,9 @@ public final class EcuBinding {
     public String idleTypeStepperOption = "";
     public String alsEnableParam = "";
     public String alsDisableOption = "";
+    /** ECU maximum anti-lag time per activation and cut-off RPM (optional; written from the hold settings). */
+    public String alsMaxTimeParam = "";
+    public String alsMinRpmParam = "";
 
     public TableOrientation orientation = TableOrientation.AUTO;
 
@@ -178,6 +181,8 @@ public final class EcuBinding {
         checkParam(problems, params, "ALS idle valve duty parameter", alsAirDutyParam, false);
         checkParam(problems, params, "Idle valve type parameter", idleTypeParam, false);
         checkParam(problems, params, "ALS enable parameter", alsEnableParam, false);
+        checkParam(problems, params, "ALS max time parameter", alsMaxTimeParam, false);
+        checkParam(problems, params, "ALS cut-off RPM parameter", alsMinRpmParam, false);
         if (!has(alsAirStepsParam) && !has(alsAirDutyParam)) {
             problems.add("At least one ALS idle valve parameter (steps or duty) is required");
         }
@@ -339,6 +344,8 @@ public final class EcuBinding {
         p.setProperty(prefix + "idleTypeStepperOption", idleTypeStepperOption);
         p.setProperty(prefix + "alsEnableParam", alsEnableParam);
         p.setProperty(prefix + "alsDisableOption", alsDisableOption);
+        p.setProperty(prefix + "alsMaxTimeParam", alsMaxTimeParam);
+        p.setProperty(prefix + "alsMinRpmParam", alsMinRpmParam);
         p.setProperty(prefix + "orientation", orientation.name());
     }
 
@@ -412,6 +419,8 @@ public final class EcuBinding {
         idleTypeStepperOption = p.getProperty(prefix + "idleTypeStepperOption", idleTypeStepperOption);
         alsEnableParam = p.getProperty(prefix + "alsEnableParam", alsEnableParam);
         alsDisableOption = p.getProperty(prefix + "alsDisableOption", alsDisableOption);
+        alsMaxTimeParam = p.getProperty(prefix + "alsMaxTimeParam", alsMaxTimeParam);
+        alsMinRpmParam = p.getProperty(prefix + "alsMinRpmParam", alsMinRpmParam);
         try {
             orientation = TableOrientation.valueOf(p.getProperty(prefix + "orientation", orientation.name()));
         } catch (IllegalArgumentException e) {

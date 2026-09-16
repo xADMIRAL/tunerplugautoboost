@@ -4,14 +4,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Anti-lag autotune settings. The goal is a chosen manifold pressure while the throttle is closed
- * and the anti-lag system is active, reached with the least ignition retard (heat) and, as a
- * second knob, extra air through the idle valve.
+ * Anti-lag autotune settings. Three of them are what the driver picks: the boost to hold off
+ * throttle ({@link #targetKpa}), the engine speed the anti-lag must not let the engine drop
+ * below ({@link #holdRpm}) and for how long one activation may hold it ({@link #holdSec}).
+ * Ignition retard is the knob for boost, idle-valve air the knob for the RPM hold; the ECU's
+ * maximum activation time is written from {@link #holdSec}. Heat and stalling are watched all
+ * the time. Everything else is an advanced setting.
  */
 public final class AlsConfig {
     /** Boost to hold off throttle while ALS is active, kPa absolute. */
     public double targetKpa = 130;
     public double tolKpa = 8;
+    /** Engine speed the anti-lag must hold off throttle: idle-valve air is added until the RPM stays above it. */
+    public double holdRpm = 3000;
+    public double holdTolRpm = 150;
+    /** Seconds one activation may hold boost and RPM (written to the ECU's maximum ALS time). */
+    public double holdSec = 3;
     /** Throttle at or below this counts as "off throttle" when the ECU does not report an ALS flag. */
     public double offThrottleTps = 12;
     /** Throttle above this ends an ALS event (driver back on the power). */
@@ -30,7 +38,7 @@ public final class AlsConfig {
     /** Rows of the ALS timing table (TPS axis) at or below this get the change. */
     public double maxRowTps = 20;
 
-    /** Second knob: extra air through the idle valve once the timing is at its retard limit. */
+    /** Tune the idle-valve air for the RPM hold (and give it back where the anti-lag makes too much boost). */
     public boolean tuneAir = true;
     public double airStep = 10;
     public double airMin = 20;
@@ -50,10 +58,18 @@ public final class AlsConfig {
     public int runsRequired = 2;
     public double autoEndRunIdleSec = 10;
 
+    /** ALS cut-off RPM to write to the ECU: comfortably below the hold RPM, above the stall guard. */
+    public double ecuMinRpm() {
+        return Math.max(stallRpm + 200, Math.min(holdRpm - 200, holdRpm - 700));
+    }
+
     public AlsConfig copy() {
         AlsConfig c = new AlsConfig();
         c.targetKpa = targetKpa;
         c.tolKpa = tolKpa;
+        c.holdRpm = holdRpm;
+        c.holdTolRpm = holdTolRpm;
+        c.holdSec = holdSec;
         c.offThrottleTps = offThrottleTps;
         c.onThrottleTps = onThrottleTps;
         c.minRpm = minRpm;
@@ -97,6 +113,15 @@ public final class AlsConfig {
         }
         if (maxMatC >= abortMatC) {
             p.add("MAT warning must be below MAT abort");
+        }
+        if (holdRpm <= stallRpm + 300) {
+            p.add("Hold RPM must be well above the stall guard");
+        }
+        if (holdRpm > maxRpm) {
+            p.add("Hold RPM must not exceed the maximum RPM");
+        }
+        if (holdSec <= 0 || holdSec > 15) {
+            p.add("Hold time must be between 0 and 15 s");
         }
         return p;
     }

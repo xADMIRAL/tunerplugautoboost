@@ -60,6 +60,17 @@ public final class SimEcu {
         return alsActive;
     }
 
+    /** Engine speed the anti-lag holds off throttle: more idle-valve air, less retard = more torque. */
+    public double alsHoldRpm() {
+        if (!alsActive || alsTiming == null) {
+            return 1500;
+        }
+        double retard = Math.max(0, -alsTiming.lookup(alsHoldLookupRpm, 0) - 5);
+        return 1000 + 12 * alsAir - 8 * retard;
+    }
+
+    private double alsHoldLookupRpm = 3000;
+
     /** A cool-down drive between runs. */
     public void coolDown(double seconds) {
         mat = Math.max(35, mat - 1.5 * seconds);
@@ -100,6 +111,7 @@ public final class SimEcu {
         if (cond) {
             alsTimer += dt;
             alsActive = true;
+            alsHoldLookupRpm = rpm;
             double retard = Math.max(0, -alsTiming.lookup(rpm, tps) - 5);
             mat += (2.0 + 0.12 * retard) * dt;
         } else {

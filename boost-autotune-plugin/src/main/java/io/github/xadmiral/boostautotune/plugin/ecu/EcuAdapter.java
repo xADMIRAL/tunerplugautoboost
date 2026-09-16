@@ -287,6 +287,28 @@ public final class EcuAdapter {
         return port.parameterInfo(config(), alsAirParam());
     }
 
+    /** ECU maximum anti-lag time per activation, or NaN when not bound. */
+    public double readAlsMaxTime() throws EcuException {
+        return b.has(b.alsMaxTimeParam) ? port.readScalar(config(), b.alsMaxTimeParam) : Double.NaN;
+    }
+
+    public void writeAlsMaxTime(double sec) throws EcuException {
+        if (b.has(b.alsMaxTimeParam) && !Double.isNaN(sec)) {
+            port.writeScalar(config(), b.alsMaxTimeParam, sec);
+        }
+    }
+
+    /** ECU anti-lag cut-off RPM, or NaN when not bound. */
+    public double readAlsMinRpm() throws EcuException {
+        return b.has(b.alsMinRpmParam) ? port.readScalar(config(), b.alsMinRpmParam) : Double.NaN;
+    }
+
+    public void writeAlsMinRpm(double rpm) throws EcuException {
+        if (b.has(b.alsMinRpmParam) && !Double.isNaN(rpm)) {
+            port.writeScalar(config(), b.alsMinRpmParam, rpm);
+        }
+    }
+
     public String readAlsEnable() throws EcuException {
         return b.has(b.alsEnableParam) ? port.readOption(config(), b.alsEnableParam) : null;
     }

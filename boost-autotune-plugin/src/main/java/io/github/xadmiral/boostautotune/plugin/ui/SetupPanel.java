@@ -114,6 +114,8 @@ public final class SetupPanel extends JPanel {
             new Row("idleTypeStepperOption", "  ... option meaning stepper", "text"),
             new Row("alsEnableParam", "Anti-lag enable / input parameter", "param"),
             new Row("alsDisableOption", "  ... option meaning OFF", "text"),
+            new Row("alsMaxTimeParam", "Anti-lag max time per activation, s (optional)", "param"),
+            new Row("alsMinRpmParam", "Anti-lag cut-off RPM (optional)", "param"),
             new Row("orientation", "Table orientation", "orient"),
     };
 

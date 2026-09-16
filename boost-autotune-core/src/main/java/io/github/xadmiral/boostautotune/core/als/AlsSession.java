@@ -22,24 +22,32 @@ public final class AlsSession {
         public final int runNumber;
         public final Grid timing;
         public final double air;
+        /** Seconds one activation may hold (ECU maximum ALS time) and the ALS cut-off RPM to write. */
+        public final double holdSec;
+        public final double ecuMinRpm;
+        public final double holdRpm;
         public final boolean finalResult;
         public final List<String> notes = new ArrayList<String>();
 
-        Plan(int runNumber, Grid timing, double air, boolean finalResult) {
+        Plan(int runNumber, Grid timing, double air, AlsConfig cfg, boolean finalResult) {
             this.runNumber = runNumber;
             this.timing = timing;
             this.air = air;
+            this.holdSec = cfg.holdSec;
+            this.ecuMinRpm = cfg.ecuMinRpm();
+            this.holdRpm = cfg.holdRpm;
             this.finalResult = finalResult;
         }
 
         public String title() {
-            return finalResult ? "Anti-lag settled" : String.format(Locale.US, "Run %d: anti-lag, idle valve %.0f", runNumber, air);
+            return finalResult ? "Anti-lag settled"
+                    : String.format(Locale.US, "Run %d: anti-lag, idle valve %.0f, hold >= %.0f rpm for %.0f s", runNumber, air, holdRpm, holdSec);
         }
 
         public String driverInstructions() {
             return finalResult ? "Burn the tune. Give the turbo a cool-down drive." :
-                    "With the anti-lag armed, in 3rd gear at 3500-5500 rpm: lift fully off the throttle for 2-3 s, then back on. "
-                            + "Repeat 3-4 times with the ECU's pause time between lifts. Watch MAT; stop if anything sounds wrong.";
+                    String.format(Locale.US, "With the anti-lag armed, in 3rd gear at 3500-5500 rpm: lift fully off the throttle for about %.0f s, then back on. "
+                            + "Repeat 3-4 times with the ECU's pause time between lifts. Watch MAT; stop if anything sounds wrong.", holdSec + 1);
         }
     }
 
@@ -49,6 +57,8 @@ public final class AlsSession {
         public final List<String> messages = new ArrayList<String>();
         public final List<String> changes = new ArrayList<String>();
         public double activeSec;
+        /** Median of the lowest RPM seen in each event; NaN without events. */
+        public double minRpm = Double.NaN;
         public boolean converged;
         public boolean done;
         public Plan nextPlan;
@@ -59,7 +69,8 @@ public final class AlsSession {
 
         public String summary(AlsConfig cfg) {
             StringBuilder sb = new StringBuilder(plan.title()).append('\n');
-            sb.append(String.format(Locale.US, "Events: %d, ALS active %.1f s\n", events.size(), activeSec));
+            sb.append(String.format(Locale.US, "Events: %d, ALS active %.1f s%s\n", events.size(), activeSec,
+                    Double.isNaN(minRpm) ? "" : String.format(Locale.US, ", RPM held down to %.0f (asked >= %.0f)", minRpm, cfg.holdRpm)));
             for (AlsEvent e : events) {
                 sb.append("  ").append(e.summary(cfg)).append('\n');
             }
@@ -99,6 +110,12 @@ public final class AlsSession {
     private double lastEventEnd = Double.NaN;
     private boolean haveFlag;
     private final List<String> log = new ArrayList<String>();
+    private double hottest = Double.NaN;
+    /** Per RPM column: last shortfall, last timing change, runs without response, and columns given up on. */
+    private double[] lastErr;
+    private double[] lastDelta;
+    private int[] noResponse;
+    private boolean[] capped;
 
     public AlsSession(AlsConfig cfg) {
         this.cfg = cfg.copy();
@@ -157,11 +174,17 @@ public final class AlsSession {
         originalAir = ecuAir;
         timing = ecuTiming.copy();
         air = ecuAir;
+        int cols = timing.xAxis().size();
+        lastErr = new double[cols];
+        java.util.Arrays.fill(lastErr, Double.NaN);
+        lastDelta = new double[cols];
+        noResponse = new int[cols];
+        capped = new boolean[cols];
         runNumber = 0;
         goodStreak = 0;
         abortReason = null;
         log.clear();
-        plan = new Plan(1, timing.copy(), air, false);
+        plan = new Plan(1, timing.copy(), air, cfg, false);
         state = SessionState.READY;
         return plan;
     }
@@ -277,7 +300,7 @@ public final class AlsSession {
         r.activeSec = activeSec;
         if (events.isEmpty()) {
             r.messages.add("No anti-lag event recorded (need >= " + cfg.minEventSec + " s off throttle with ALS active)");
-            r.nextPlan = new Plan(runNumber + 1, timing.copy(), air, false);
+            r.nextPlan = new Plan(runNumber + 1, timing.copy(), air, cfg, false);
             r.nextPlan.notes.add("Repeat with the same settings");
             lastReport = r;
             state = SessionState.REVIEW;
@@ -286,15 +309,18 @@ public final class AlsSession {
         Axis rpm = timing.xAxis();
         double[] errSum = new double[rpm.size()];
         int[] n = new int[rpm.size()];
-        double hottest = Double.NaN;
+        hottest = Double.NaN;
         for (AlsEvent e : events) {
-            double map = e.meanMapSettled(cfg.settleSec);
-            if (Double.isNaN(map) || e.settledSamples(cfg.settleSec) < cfg.minSamplesPerColumn) {
-                continue;
+            // settled samples are charged to the column of the RPM they were taken at: the engine
+            // falls towards the hold RPM during an event, so the boost is made by several columns
+            for (Sample x : e.active) {
+                if (x.timeSec - e.startTime() < cfg.settleSec || !Stats.finite(x.map)) {
+                    continue;
+                }
+                int col = rpm.nearest(x.rpm);
+                errSum[col] += cfg.targetKpa - x.map;
+                n[col]++;
             }
-            int col = rpm.nearest(e.meanRpm());
-            errSum[col] += cfg.targetKpa - map;
-            n[col]++;
             double mat = e.maxMat();
             if (Stats.finite(mat)) {
                 hottest = Double.isNaN(hottest) ? mat : Math.max(hottest, mat);
@@ -304,26 +330,47 @@ public final class AlsSession {
         double nextAir = air;
         boolean allWithin = true;
         boolean anyColumn = false;
-        boolean needMoreAir = false;
-        double largestShortfall = 0;
+        int limitedColumns = 0;
+        boolean tooMuchAtLeastRetard = false;
         for (int col = 0; col < rpm.size(); col++) {
-            if (n[col] == 0) {
+            if (n[col] < cfg.minSamplesPerColumn) {
                 continue;
             }
             anyColumn = true;
             double err = errSum[col] / n[col];
             if (Math.abs(err) <= cfg.tolKpa) {
                 r.changes.add(String.format(Locale.US, "%.0f rpm: MAP within %.0f kPa of target - kept", rpm.bin(col), cfg.tolKpa));
+                lastErr[col] = err;
+                lastDelta[col] = 0;
+                noResponse[col] = 0;
                 continue;
             }
-            allWithin = false;
+            if (capped[col]) {
+                r.changes.add(String.format(Locale.US, "%.0f rpm: MAP %.0f kPa short, retard has no effect here - kept as is", rpm.bin(col), err));
+                continue;
+            }
+            // more retard last time but no more boost: after two such runs the anti-lag simply cannot
+            // make more boost at this RPM (too little exhaust energy), so stop adding heat there
+            if (err > 0 && lastDelta[col] < 0 && Stats.finite(lastErr[col]) && err > lastErr[col] - 1.5) {
+                noResponse[col]++;
+            } else {
+                noResponse[col] = 0;
+            }
+            lastErr[col] = err;
+            if (err > 0 && noResponse[col] >= 2) {
+                capped[col] = true;
+                lastDelta[col] = 0;
+                limitedColumns++;
+                r.changes.add(String.format(Locale.US, "%.0f rpm: two more-retard steps brought no more boost (MAP %.0f kPa short): the anti-lag cannot do more here - accepted",
+                        rpm.bin(col), err));
+                continue;
+            }
             // bigger steps while far from the target, single steps close to it
-            double mult = Stats.clamp(Math.abs(err) / (2 * cfg.tolKpa), 1, 3);
+            double mult = Stats.clamp(Math.abs(err) / (1.5 * cfg.tolKpa), 1, 3);
             double delta = (err > 0 ? -cfg.timingStepDeg : cfg.timingStepDeg) * mult;
             if (mult > 1) {
                 delta = Math.round(delta / cfg.timingStepDeg) * cfg.timingStepDeg;
             }
-            largestShortfall = Math.max(largestShortfall, err);
             boolean moved = false;
             for (int yi = 0; yi < next.height(); yi++) {
                 if (next.yAxis().bin(yi) > cfg.maxRowTps) {
@@ -336,44 +383,85 @@ public final class AlsSession {
                 }
                 next.set(col, yi, v);
             }
+            lastDelta[col] = moved ? delta : 0;
             if (moved) {
+                allWithin = false;
                 r.changes.add(String.format(Locale.US, "%.0f rpm: MAP %s target by %.0f kPa -> timing %s%.0f deg",
                         rpm.bin(col), err > 0 ? "below" : "above", Math.abs(err), delta < 0 ? "" : "+", delta));
             } else if (err > 0) {
-                needMoreAir = true;
-                r.changes.add(String.format(Locale.US, "%.0f rpm: timing already at the retard limit %.0f deg", rpm.bin(col), cfg.minTimingDeg));
+                // as much boost as the retard limit allows: accepted, the driver is told
+                limitedColumns++;
+                r.changes.add(String.format(Locale.US, "%.0f rpm: timing at the retard limit %.0f deg, MAP %.0f kPa short of target - accepted",
+                        rpm.bin(col), cfg.minTimingDeg, err));
             } else {
-                r.changes.add(String.format(Locale.US, "%.0f rpm: timing already at %.0f deg and still too much boost - lower the idle valve air", rpm.bin(col), cfg.maxTimingDeg));
-                if (cfg.tuneAir) {
-                    nextAir = Math.max(cfg.airMin, nextAir - cfg.airStep);
-                }
+                allWithin = false;
+                tooMuchAtLeastRetard = true;
+                r.changes.add(String.format(Locale.US, "%.0f rpm: timing already at %.0f deg and still %.0f kPa too much boost", rpm.bin(col), cfg.maxTimingDeg, -err));
             }
         }
-        if (needMoreAir && cfg.tuneAir) {
-            double mult = Stats.clamp(largestShortfall / (2 * cfg.tolKpa), 1, 3);
-            nextAir = Math.min(cfg.airMax, air + cfg.airStep * mult);
-            r.changes.add(String.format(Locale.US, "Idle valve air %.0f -> %.0f", air, nextAir));
+        if (limitedColumns > 0) {
+            r.messages.add(String.format(Locale.US,
+                    "%d column(s) cannot reach %.0f kPa: the retard limit or the exhaust energy at that RPM is the ceiling - lower the target, or raise the hold RPM",
+                    limitedColumns, cfg.targetKpa));
+        }
+
+        // ---- RPM hold: the idle valve air keeps the engine from dropping below the hold RPM ----
+        List<Double> mins = new ArrayList<Double>();
+        for (AlsEvent e : events) {
+            double m = e.minRpm();
+            if (Stats.finite(m)) {
+                mins.add(m);
+            }
+        }
+        r.minRpm = mins.isEmpty() ? Double.NaN : Stats.median(mins);
+        boolean rpmOk = true;
+        if (cfg.tuneAir && Stats.finite(r.minRpm)) {
+            double shortfall = cfg.holdRpm - r.minRpm;
+            if (shortfall > cfg.holdTolRpm) {
+                if (air >= cfg.airMax - 1e-9) {
+                    r.messages.add(String.format(Locale.US,
+                            "RPM fell to %.0f, %.0f below the hold RPM, but the idle valve is already at its maximum %.0f - accepted",
+                            r.minRpm, shortfall, cfg.airMax));
+                } else {
+                    rpmOk = false;
+                    double mult = Stats.clamp(shortfall / (2 * cfg.holdTolRpm), 1, 3);
+                    nextAir = Math.min(cfg.airMax, air + cfg.airStep * mult);
+                    r.changes.add(String.format(Locale.US, "RPM fell to %.0f (hold >= %.0f): idle valve air %.0f -> %.0f",
+                            r.minRpm, cfg.holdRpm, air, nextAir));
+                }
+            } else if (tooMuchAtLeastRetard && air > cfg.airMin + 1e-9) {
+                nextAir = Math.max(cfg.airMin, air - cfg.airStep);
+                r.changes.add(String.format(Locale.US, "Too much boost at the least retard: idle valve air %.0f -> %.0f", air, nextAir));
+            } else if (shortfall < -2 * cfg.holdTolRpm && air > cfg.airMin + 1e-9) {
+                nextAir = Math.max(cfg.airMin, air - cfg.airStep);
+                r.changes.add(String.format(Locale.US, "RPM held at %.0f, well above %.0f: idle valve air %.0f -> %.0f (less bleed and heat)",
+                        r.minRpm, cfg.holdRpm, air, nextAir));
+            } else {
+                r.changes.add(String.format(Locale.US, "RPM held down to %.0f (hold >= %.0f) - kept", r.minRpm, cfg.holdRpm));
+            }
+        } else if (Stats.finite(r.minRpm) && cfg.holdRpm - r.minRpm > cfg.holdTolRpm) {
+            r.messages.add(String.format(Locale.US, "RPM fell to %.0f, below the hold RPM %.0f (air tuning is off)", r.minRpm, cfg.holdRpm));
         }
         if (Stats.finite(hottest) && hottest > cfg.maxMatC) {
             r.messages.add(String.format(Locale.US, "MAT reached %.0f C (warning above %.0f): give it a cool-down before the next run", hottest, cfg.maxMatC));
         }
         if (!anyColumn) {
             r.messages.add("Events were too short or too few settled samples: repeat");
-            r.nextPlan = new Plan(runNumber + 1, timing.copy(), air, false);
+            r.nextPlan = new Plan(runNumber + 1, timing.copy(), air, cfg, false);
             r.nextPlan.notes.add("Repeat with the same settings");
             lastReport = r;
             state = SessionState.REVIEW;
             return r;
         }
-        boolean good = allWithin;
+        boolean good = allWithin && rpmOk;
         goodStreak = good ? goodStreak + 1 : 0;
         r.converged = good;
         if (goodStreak >= cfg.runsRequired) {
             r.done = true;
-            r.nextPlan = new Plan(runNumber + 1, next, nextAir, true);
-            r.nextPlan.notes.add("Off-throttle boost on target in " + goodStreak + " runs in a row");
+            r.nextPlan = new Plan(runNumber + 1, next, nextAir, cfg, true);
+            r.nextPlan.notes.add("Off-throttle boost and RPM hold on target in " + goodStreak + " runs in a row");
         } else {
-            r.nextPlan = new Plan(runNumber + 1, next, nextAir, false);
+            r.nextPlan = new Plan(runNumber + 1, next, nextAir, cfg, false);
             if (good) {
                 r.nextPlan.notes.add("Good run " + goodStreak + " of " + cfg.runsRequired);
             }
@@ -399,7 +487,7 @@ public final class AlsSession {
         if (state != SessionState.REVIEW) {
             throw new IllegalStateException("Nothing to repeat");
         }
-        plan = new Plan(runNumber + 1, timing.copy(), air, false);
+        plan = new Plan(runNumber + 1, timing.copy(), air, cfg, false);
         plan.notes.add("Repeat of the previous run");
         state = SessionState.READY;
         return plan;

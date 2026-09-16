@@ -368,6 +368,9 @@ public final class SettingsStore {
     public static void alsTo(AlsConfig c, Properties p, String pre) {
         p.setProperty(pre + "targetKpa", fmt(c.targetKpa));
         p.setProperty(pre + "tolKpa", fmt(c.tolKpa));
+        p.setProperty(pre + "holdRpm", fmt(c.holdRpm));
+        p.setProperty(pre + "holdTolRpm", fmt(c.holdTolRpm));
+        p.setProperty(pre + "holdSec", fmt(c.holdSec));
         p.setProperty(pre + "offThrottleTps", fmt(c.offThrottleTps));
         p.setProperty(pre + "onThrottleTps", fmt(c.onThrottleTps));
         p.setProperty(pre + "minRpm", fmt(c.minRpm));
@@ -397,6 +400,9 @@ public final class SettingsStore {
     public static void alsFrom(AlsConfig c, Properties p, String pre) {
         c.targetKpa = d(p, pre + "targetKpa", c.targetKpa);
         c.tolKpa = d(p, pre + "tolKpa", c.tolKpa);
+        c.holdRpm = d(p, pre + "holdRpm", c.holdRpm);
+        c.holdTolRpm = d(p, pre + "holdTolRpm", c.holdTolRpm);
+        c.holdSec = d(p, pre + "holdSec", c.holdSec);
         c.offThrottleTps = d(p, pre + "offThrottleTps", c.offThrottleTps);
         c.onThrottleTps = d(p, pre + "onThrottleTps", c.onThrottleTps);
         c.minRpm = d(p, pre + "minRpm", c.minRpm);

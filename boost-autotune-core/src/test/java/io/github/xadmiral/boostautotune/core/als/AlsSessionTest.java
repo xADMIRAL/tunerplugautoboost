@@ -37,6 +37,8 @@ class AlsSessionTest {
         while (session.state() != SessionState.DONE && session.state() != SessionState.ABORTED && runs < maxRuns) {
             ecu.alsTiming = plan.timing;
             ecu.alsAir = plan.air;
+            ecu.alsMaxTimeSec = plan.holdSec;
+            ecu.alsMinRpm = plan.ecuMinRpm;
             ecu.resetAuxiliaries();
             session.startRun();
             for (Sample s : sim.alsCycle(3)) {
@@ -64,6 +66,7 @@ class AlsSessionTest {
         ecu.alsAir = 60;
         AlsConfig cfg = new AlsConfig();
         cfg.targetKpa = 130;
+        cfg.holdRpm = 2000; // easy RPM hold: this test is about the timing
         cfg.autoEndRunIdleSec = 0;
         AlsSession session = new AlsSession(cfg);
         session.initialize(start, 60);
@@ -71,31 +74,68 @@ class AlsSessionTest {
         assertEquals(SessionState.DONE, session.state(), "aborted: " + session.abortReason());
         assertTrue(runs <= 12, "runs " + runs);
         Grid result = session.plan().timing;
-        // the visited columns (around 3000-5000 rpm) got more retard, unvisited ones stayed
-        assertTrue(result.get(2, 0) < -14, "4000 rpm should be retarded: " + result.get(2, 0));
+        // the visited columns (2000-4000 rpm on the way down to the hold RPM) got more retard, unvisited ones stayed
+        assertTrue(result.get(2, 0) <= -10, "4000 rpm should be retarded: " + result.get(2, 0));
+        assertTrue(result.min() <= -14, "the low columns need a lot of retard: " + result);
         assertEquals(-8, result.get(5, 0), 1e-9);
-        assertEquals(60, session.plan().air, 1e-9);
+        assertTrue(session.plan().air >= 60, "air " + session.plan().air);
+        assertEquals(3, session.plan().holdSec, 1e-9);
+        assertEquals(1400, session.plan().ecuMinRpm, 1e-9); // stall guard 1200 + 200
         assertTrue(session.lastReport().converged);
+        assertTrue(session.lastReport().minRpm >= cfg.holdRpm - cfg.holdTolRpm, "min rpm " + session.lastReport().minRpm);
     }
 
     @Test
-    void addsAirWhenTheTimingLimitIsReached() {
+    void holdsTheAskedRpmByAddingIdleValveAir() {
         SimEcu ecu = ecu();
         PullSimulator sim = new PullSimulator(new BoostPlant(22), ecu);
-        Grid start = Grid.filled(RPM, TPS, -18);
+        Grid start = Grid.filled(RPM, TPS, -16);
         ecu.alsTiming = start;
-        ecu.alsAir = 20;
+        ecu.alsAir = 40; // holds ~1400 rpm: far too little for the ask below
         AlsConfig cfg = new AlsConfig();
-        cfg.targetKpa = 150;
-        cfg.minTimingDeg = -20; // tight retard limit: air has to do the rest
+        cfg.targetKpa = 130;
+        cfg.holdRpm = 2600;
+        cfg.holdSec = 2.5;
         cfg.autoEndRunIdleSec = 0;
         AlsSession session = new AlsSession(cfg);
-        session.initialize(start, 20);
+        session.initialize(start, 40);
         int runs = run(session, ecu, sim, 15);
         assertEquals(SessionState.DONE, session.state(), "aborted: " + session.abortReason());
-        assertTrue(session.plan().air > 20, "air should have been raised: " + session.plan().air);
-        assertTrue(session.plan().timing.get(2, 0) >= -20 - 1e-9);
-        assertTrue(runs <= 14, "runs " + runs);
+        assertTrue(runs <= 12, "runs " + runs);
+        assertTrue(session.plan().air > 100, "air should have been raised for the RPM hold: " + session.plan().air);
+        AlsSession.Report last = session.lastReport();
+        assertTrue(last.minRpm >= cfg.holdRpm - cfg.holdTolRpm, "RPM held down to " + last.minRpm);
+        assertEquals(2.5, session.plan().holdSec, 1e-9);
+        assertEquals(1900, session.plan().ecuMinRpm, 1e-9); // hold rpm - 700
+        for (AlsEvent e : last.events) {
+            assertTrue(e.durationSec() <= cfg.holdSec + 0.2, "the ECU cuts the anti-lag after the hold time: " + e.durationSec());
+        }
+        assertTrue(last.summary(cfg).contains("RPM held down to"));
+    }
+
+    @Test
+    void acceptsWhatTheRetardLimitAllows() {
+        SimEcu ecu = ecu();
+        PullSimulator sim = new PullSimulator(new BoostPlant(24), ecu);
+        Grid start = Grid.filled(RPM, TPS, -18);
+        ecu.alsTiming = start;
+        ecu.alsAir = 60;
+        AlsConfig cfg = new AlsConfig();
+        cfg.targetKpa = 175;    // out of reach with the retard limited to -20 deg
+        cfg.minTimingDeg = -20;
+        cfg.holdRpm = 2000;
+        cfg.autoEndRunIdleSec = 0;
+        AlsSession session = new AlsSession(cfg);
+        session.initialize(start, 60);
+        int runs = run(session, ecu, sim, 15);
+        assertEquals(SessionState.DONE, session.state(), "aborted: " + session.abortReason());
+        assertTrue(runs <= 8, "runs " + runs);
+        assertEquals(-20, session.plan().timing.min(), 1e-9); // the visited columns sit on the limit
+        boolean told = false;
+        for (String m : session.lastReport().messages) {
+            told |= m.contains("cannot reach");
+        }
+        assertTrue(told, "the driver should be told the target is out of reach: " + session.lastReport().messages);
     }
 
     @Test

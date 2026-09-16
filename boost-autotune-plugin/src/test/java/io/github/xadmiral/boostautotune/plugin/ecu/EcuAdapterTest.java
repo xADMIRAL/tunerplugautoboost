@@ -142,6 +142,12 @@ class EcuAdapterTest {
         a.writeAlsAir(120);
         assertEquals(120, port.readScalar(SimEcuPort.CONFIG, b.alsAirStepsParam), 1e-9);
         assertEquals("Off", a.readAlsEnable());
+        assertEquals(4, a.readAlsMaxTime(), 1e-9);
+        assertEquals(500, a.readAlsMinRpm(), 1e-9);
+        a.writeAlsMaxTime(2.5);
+        a.writeAlsMinRpm(2300);
+        assertEquals(2.5, port.readScalar(SimEcuPort.CONFIG, b.alsMaxTimeParam), 1e-9);
+        assertEquals(2300, port.readScalar(SimEcuPort.CONFIG, b.alsMinRpmParam), 1e-9);
         a.writeAlsEnable("Always ON");
         assertEquals("Always ON", port.readOption(SimEcuPort.CONFIG, b.alsEnableParam));
         // generic access used by the drift presets

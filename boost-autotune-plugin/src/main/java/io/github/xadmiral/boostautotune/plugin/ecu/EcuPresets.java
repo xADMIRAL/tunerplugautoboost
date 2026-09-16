@@ -91,6 +91,8 @@ public final class EcuPresets {
             b.idleTypeStepperOption = "Stepper valve (6 wire)";
             b.alsEnableParam = "als_in_pin";
             b.alsDisableOption = "Off";
+            b.alsMaxTimeParam = "als_maxtime";
+            b.alsMinRpmParam = "als_minrpm";
         } else if (SPEEDUINO.equals(name)) {
             b.rpmChannel = "rpm";
             b.tpsChannel = "tps";

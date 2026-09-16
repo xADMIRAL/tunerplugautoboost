@@ -131,7 +131,8 @@ public final class PullSimulator {
             end = time + 3.0;
             while (time < end) {
                 out.add(tick(rpm, 3, dt, 3));
-                rpm = Math.max(2500, rpm - 250 * dt);
+                // off throttle the engine falls towards what the anti-lag can hold (idle-ish without it)
+                rpm = Math.max(ecu.alsHoldRpm(), rpm - 1200 * dt);
             }
             end = time + 2.5;
             while (time < end) {

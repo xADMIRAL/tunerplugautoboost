@@ -193,7 +193,7 @@ class ModesDemoIntegrationTest {
         // a drift preset switches the anti-lag on and sets its axes / thresholds
         EcuAdapter setup = new EcuAdapter(port, b);
         int written = 0;
-        for (AntilagPresets.Setting s : AntilagPresets.create(AntilagPresets.DRIFT_MILD)) {
+        for (AntilagPresets.Setting s : AntilagPresets.create(AntilagPresets.DRIFT_MEDIUM)) {
             if (setup.hasParameter(s.param)) {
                 setup.writeAny(s.param, s.value);
                 written++;
@@ -207,9 +207,12 @@ class ModesDemoIntegrationTest {
         setup.writeAny(b.alsAirStepsParam, "60");
         AlsConfig cfg = new AlsConfig();
         cfg.targetKpa = 130;
+        cfg.holdRpm = 2600;
+        cfg.holdSec = 2.5;
         cfg.autoEndRunIdleSec = 0;
         ctl.startAntilagSession(cfg, b);
         assertEquals(TuneMode.ANTILAG, ctl.mode());
+        assertEquals(3, port.readScalar(SimEcuPort.CONFIG, b.alsMaxTimeParam), 1e-9); // preset value until the plan is written
         int runs = 0;
         while (ctl.state() != SessionState.DONE && runs < 12) {
             ctl.writePlanToEcu();
@@ -225,17 +228,25 @@ class ModesDemoIntegrationTest {
             runs++;
         }
         assertEquals(SessionState.DONE, ctl.state(), String.join("\n", listener.log));
-        assertTrue(runs >= 2 && runs <= 10, "runs " + runs);
+        assertTrue(runs >= 2 && runs <= 12, "runs " + runs);
+        // the hold settings reached the ECU and the idle valve was opened for the RPM hold
+        assertEquals(2.5, port.readScalar(SimEcuPort.CONFIG, b.alsMaxTimeParam), 1e-9);
+        assertEquals(1900, port.readScalar(SimEcuPort.CONFIG, b.alsMinRpmParam), 1e-9);
+        assertTrue(port.readScalar(SimEcuPort.CONFIG, b.alsAirStepsParam) > 100, "air " + port.readScalar(SimEcuPort.CONFIG, b.alsAirStepsParam));
+        AlsSession.Report last = (AlsSession.Report) listener.last;
+        assertTrue(last.minRpm >= cfg.holdRpm - cfg.holdTolRpm, "RPM held down to " + last.minRpm);
         double[][] timing = port.readArray2D(SimEcuPort.CONFIG, b.alsTimingTable);
-        // rows = TPS bins, columns = RPM bins 2000..7000: the visited 4000 rpm column got more retard
-        assertTrue(timing[0][2] < -14, "4000 rpm timing " + timing[0][2]);
-        assertTrue(timing[0][2] >= -35, "4000 rpm timing " + timing[0][2]);
+        // rows = TPS bins, columns = RPM bins 2000..7000: the visited low columns got more retard
+        double lowest = Math.min(timing[0][0], Math.min(timing[0][1], timing[0][2]));
+        assertTrue(lowest < -12, "2000-4000 rpm timing " + lowest);
+        assertTrue(lowest >= -35, "timing " + lowest);
         assertEquals(-8, timing[0][5], 1e-9); // 7000 rpm never visited
         assertFalse(ctl.tables().isEmpty());
         assertTrue(ctl.analysisText().length() > 0);
         ctl.restoreOriginal();
         assertEquals(-8, port.readArray2D(SimEcuPort.CONFIG, b.alsTimingTable)[0][2], 1e-9);
         assertEquals(60, port.readScalar(SimEcuPort.CONFIG, b.alsAirStepsParam), 1e-9);
+        assertEquals(3, port.readScalar(SimEcuPort.CONFIG, b.alsMaxTimeParam), 1e-9);
         assertEquals("Always ON", port.readOption(SimEcuPort.CONFIG, b.alsEnableParam));
     }
 }
