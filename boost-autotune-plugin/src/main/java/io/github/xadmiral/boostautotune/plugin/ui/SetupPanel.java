@@ -146,7 +146,7 @@ public final class SetupPanel extends JPanel {
         this.onChanged = onChanged;
         setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        top = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        top = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 4));
         top.add(new JLabel("ECU configuration:"));
         top.add(configCombo);
         top.add(new JLabel("Preset:"));
@@ -173,7 +173,7 @@ public final class SetupPanel extends JPanel {
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(table), new JScrollPane(output));
         split.setResizeWeight(0.65);
         add(split, BorderLayout.CENTER);
-        JPanel bottom = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel bottom = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 4));
         bottom.add(signatureLabel);
         add(bottom, BorderLayout.SOUTH);
 

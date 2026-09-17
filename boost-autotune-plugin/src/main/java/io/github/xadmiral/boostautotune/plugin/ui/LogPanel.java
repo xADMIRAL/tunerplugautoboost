@@ -26,7 +26,7 @@ public final class LogPanel extends JPanel {
         area.setEditable(false);
         area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         add(new JScrollPane(area), BorderLayout.CENTER);
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel buttons = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 4));
         JButton save = new JButton("Save log...");
         JButton clear = new JButton("Clear");
         buttons.add(save);

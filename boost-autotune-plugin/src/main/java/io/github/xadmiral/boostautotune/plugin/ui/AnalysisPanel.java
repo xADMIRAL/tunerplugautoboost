@@ -42,11 +42,11 @@ public final class AnalysisPanel extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
         details.setEditable(false);
         details.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tables, new JScrollPane(details));
+        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, new JScrollPane(tables), new JScrollPane(details));
         split.setResizeWeight(0.5);
         add(split, BorderLayout.CENTER);
 
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel top = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 4));
         JButton analyze = new JButton("Analyze datalog as next run...");
         top.add(analyze);
         top.add(new JLabel("Feed a TunerStudio .msl/.csv log recorded with the current plan instead of recording live."));

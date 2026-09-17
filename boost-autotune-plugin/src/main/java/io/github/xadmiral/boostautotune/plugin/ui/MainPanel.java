@@ -144,6 +144,10 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         return antilagPanel;
     }
 
+    public TargetsPanel targetsPanel() {
+        return targets;
+    }
+
     public EcuBinding binding() {
         return binding;
     }

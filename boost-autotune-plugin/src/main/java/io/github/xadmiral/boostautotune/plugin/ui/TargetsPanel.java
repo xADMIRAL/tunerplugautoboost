@@ -185,7 +185,7 @@ public final class TargetsPanel extends JPanel {
 
         JPanel left = new JPanel(new BorderLayout());
         left.add(new JScrollPane(form.panel()), BorderLayout.CENTER);
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel buttons = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 4));
         JButton applyBtn = new JButton("Apply");
         JButton previewBtn = new JButton("Preview target table");
         buttons.add(applyBtn);
@@ -197,11 +197,32 @@ public final class TargetsPanel extends JPanel {
         preview.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
         previewModel.setYLabel("load \\ rpm");
         JPanel right = new JPanel(new BorderLayout());
-        right.add(new JLabel("Target table preview for the first stage (top row = highest load)"), BorderLayout.NORTH);
+        javax.swing.JTextArea caption = new javax.swing.JTextArea("Target table preview for the first stage (top row = highest load)");
+        caption.setEditable(false);
+        caption.setLineWrap(true);
+        caption.setWrapStyleWord(true);
+        caption.setBackground(getBackground());
+        right.add(caption, BorderLayout.NORTH);
         right.add(new JScrollPane(preview), BorderLayout.CENTER);
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, right);
-        split.setResizeWeight(0.55);
+        // a long caption must not dictate the split: the preview can be narrow, the form needs its labels
+        right.setMinimumSize(new java.awt.Dimension(160, 100));
+        left.setMinimumSize(new java.awt.Dimension(240, 100));
+        final JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, right);
+        split.setResizeWeight(0.6);
         add(split, BorderLayout.CENTER);
+        // the form gets the width it asks for (up to 70 % of the tab), the preview takes the rest
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            private int lastWidth = -1;
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                int w = getWidth();
+                if (w > 0 && w != lastWidth) {
+                    lastWidth = w;
+                    int wanted = form.panel().getPreferredSize().width + 30;
+                    split.setDividerLocation(Math.min(wanted, (int) (w * 0.7)));
+                }
+            }
+        });
 
         applyBtn.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -238,6 +259,11 @@ public final class TargetsPanel extends JPanel {
     }
 
     /** Copies the form into the config; returns false and shows the problem on bad input. */
+    /** Preferred width of the settings form (layout checks). */
+    public int formPreferredWidth() {
+        return form.panel().getPreferredSize().width;
+    }
+
     public boolean apply() {
         try {
             form.apply();

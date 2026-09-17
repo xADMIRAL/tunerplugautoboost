@@ -8,7 +8,6 @@ import io.github.xadmiral.boostautotune.plugin.ecu.SimEcuPort;
 import io.github.xadmiral.boostautotune.plugin.mode.TuneMode;
 
 import javax.swing.BorderFactory;
-import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -23,7 +22,9 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.GridLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.Locale;
@@ -38,6 +39,7 @@ public final class AutotunePanel extends JPanel {
     private static final String[] LIVE_NAMES = {"RPM", "TPS %", "MAP kPa", "Boost tgt", "Boost duty", "CLT °C", "Gear",
             "VVT angle", "VVT target", "Advance", "Knock rtd", "AFR", "Sample", "Pulls / peak", "MAT °C", "Anti-lag"};
     private final JLabel[] live = new JLabel[LIVE_NAMES.length];
+    private final JPanel[] liveCells = new JPanel[LIVE_NAMES.length];
     private final JTextArea report = new JTextArea(14, 80);
     private final JButton startSession = new JButton("Start session");
     private final JButton writePlan = new JButton("Write plan to ECU");
@@ -56,6 +58,7 @@ public final class AutotunePanel extends JPanel {
     private final JCheckBox autoApply = new JCheckBox("Auto apply & prepare next", false);
     private final Runnable beforeStart;
     private final Timer refresh;
+    private JPanel buttonRow;
 
     public AutotunePanel(final TuneController ctl, Runnable beforeStart) {
         super(new BorderLayout(6, 6));
@@ -63,29 +66,30 @@ public final class AutotunePanel extends JPanel {
         this.beforeStart = beforeStart;
         setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
-        JPanel top = new JPanel();
-        top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
-        JPanel modeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        // a vertical stack that gives every row its preferred height: no maximum sizes, nothing gets
+        // squeezed when the text is large or the window narrow
+        JPanel top = new JPanel(new GridBagLayout());
+        GridBagConstraints gc = new GridBagConstraints();
+        gc.gridx = 0;
+        gc.weightx = 1;
+        gc.fill = GridBagConstraints.HORIZONTAL;
+        gc.anchor = GridBagConstraints.WEST;
+        gc.insets = new Insets(0, 0, 2, 0);
+        JPanel modeRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 2));
         modeRow.add(new JLabel("Mode:"));
         modeRow.add(modeCombo);
         modeRow.add(startSession);
-        modeRow.setAlignmentX(LEFT_ALIGNMENT);
-        modeRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
-        top.add(modeRow);
+        top.add(modeRow, gc);
         stateLabel.setFont(stateLabel.getFont().deriveFont(Font.BOLD, 15f));
-        stateLabel.setAlignmentX(LEFT_ALIGNMENT);
-        planLabel.setAlignmentX(LEFT_ALIGNMENT);
-        top.add(stateLabel);
-        top.add(planLabel);
+        top.add(stateLabel, gc);
+        top.add(planLabel, gc);
         instructions.setEditable(false);
         instructions.setLineWrap(true);
         instructions.setWrapStyleWord(true);
         instructions.setBackground(getBackground());
-        instructions.setAlignmentX(LEFT_ALIGNMENT);
-        instructions.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
-        top.add(instructions);
+        top.add(instructions, gc);
 
-        JPanel liveRow = new JPanel(new GridLayout(2, 8, 8, 2));
+        JPanel liveRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 10, 2));
         for (int i = 0; i < live.length; i++) {
             JPanel cell = new JPanel(new BorderLayout());
             JLabel n = new JLabel(LIVE_NAMES[i]);
@@ -94,15 +98,14 @@ public final class AutotunePanel extends JPanel {
             live[i].setFont(live[i].getFont().deriveFont(Font.BOLD, 15f));
             cell.add(n, BorderLayout.NORTH);
             cell.add(live[i], BorderLayout.CENTER);
+            liveCells[i] = cell;
             liveRow.add(cell);
         }
         liveRow.setBorder(BorderFactory.createTitledBorder("Live"));
-        liveRow.setAlignmentX(LEFT_ALIGNMENT);
-        liveRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 90));
-        top.add(liveRow);
+        top.add(liveRow, gc);
         add(top, BorderLayout.NORTH);
 
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel buttons = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 4));
         for (JButton b : new JButton[]{writePlan, startRun, endRun, applyNext, repeat, abort, restore, burn}) {
             buttons.add(b);
         }
@@ -120,6 +123,7 @@ public final class AutotunePanel extends JPanel {
 
         report.setEditable(false);
         report.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        buttonRow = buttons;
         JPanel center = new JPanel(new BorderLayout());
         center.add(buttons, BorderLayout.NORTH);
         center.add(new JScrollPane(report), BorderLayout.CENTER);
@@ -217,6 +221,19 @@ public final class AutotunePanel extends JPanel {
                 updateState();
             }
         };
+    }
+
+    /** Live value labels and their cells (layout checks). */
+    public JLabel[] liveLabels() {
+        return live;
+    }
+
+    public JPanel[] liveCells() {
+        return liveCells;
+    }
+
+    public JPanel buttonRow() {
+        return buttonRow;
     }
 
     public TuneMode selectedMode() {

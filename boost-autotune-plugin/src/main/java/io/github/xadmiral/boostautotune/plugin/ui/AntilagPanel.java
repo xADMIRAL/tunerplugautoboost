@@ -106,7 +106,8 @@ public final class AntilagPanel extends JPanel {
     private final Form form = new Form();
     private final Form goals = new Form();
     private final JCheckBox advanced = new JCheckBox("Advanced settings", false);
-    private JScrollPane advancedScroll;
+    private JPanel advancedForm;
+    private JButton applyBtn;
     private final JComboBox<String> presetCombo = new JComboBox<String>();
     private final JCheckBox groupAls = new JCheckBox(AntilagPresets.GROUP_ALS, true);
     private final JCheckBox groupFlat = new JCheckBox(AntilagPresets.GROUP_FLATSHIFT, true);
@@ -129,14 +130,10 @@ public final class AntilagPanel extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
         JTextArea intro = new JTextArea(
-                "Pick a drift mode (light / medium / hard): it fills the MS3 anti-lag (ALS), flat shift and over-run settings "
-                        + "below and the three autotune goals. Untick a group to leave it alone, edit any value before writing "
-                        + "(e.g. the ALS switch input pin). The plugin keeps the old values for 'Restore original'; burn in "
-                        + "TunerStudio when happy.\n"
-                        + "Autotune: with the anti-lag on, do full lifts from WOT and hold the throttle closed for the hold time. "
-                        + "Ignition retard is tuned per RPM for the boost you want off throttle, idle-valve air so the engine "
-                        + "does not fall below the RPM you want, and the ECU's anti-lag time is set to the seconds you want. "
-                        + "Anti-lag cooks the turbo and the manifold: short runs, watch MAT, cool-down laps between runs.");
+                "Pick a drift mode: it fills the ECU settings below and the three autotune goals (edit anything before writing; "
+                        + "'Restore original' undoes). Autotune: full lifts from WOT, throttle closed for the hold time. "
+                        + "Retard is tuned for the boost, idle-valve air for the RPM hold, the ECU anti-lag time for the seconds. "
+                        + "Anti-lag cooks the turbo: short runs, watch MAT, cool-down laps.");
         intro.setEditable(false);
         intro.setLineWrap(true);
         intro.setWrapStyleWord(true);
@@ -146,7 +143,7 @@ public final class AntilagPanel extends JPanel {
         // ---- presets ----
         JPanel presets = new JPanel(new BorderLayout(4, 4));
         presets.setBorder(BorderFactory.createTitledBorder("Drift mode: ECU settings to write (MS3 parameter names)"));
-        JPanel presetRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel presetRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 4));
         presetRow.add(new JLabel("Drift mode:"));
         for (String n : AntilagPresets.names()) {
             presetCombo.addItem(n);
@@ -161,13 +158,14 @@ public final class AntilagPanel extends JPanel {
         presetRow.add(groupOverrun);
         presets.add(presetRow, BorderLayout.NORTH);
         table.setRowHeight(22);
+        table.setPreferredScrollableViewportSize(new java.awt.Dimension(600, 22 * 6));
         table.getColumnModel().getColumn(0).setPreferredWidth(80);
         table.getColumnModel().getColumn(1).setPreferredWidth(120);
         table.getColumnModel().getColumn(2).setPreferredWidth(170);
         table.getColumnModel().getColumn(3).setPreferredWidth(170);
         table.getColumnModel().getColumn(4).setPreferredWidth(330);
         presets.add(new JScrollPane(table), BorderLayout.CENTER);
-        JPanel presetButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel presetButtons = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 4));
         JButton readBtn = new JButton("Read current from ECU");
         JButton writeBtn = new JButton("Write selected groups to ECU");
         presetButtons.add(readBtn);
@@ -255,29 +253,41 @@ public final class AntilagPanel extends JPanel {
                 new Form.DoubleSet() { public void set(double v) { cfg.respoolMaxSec = v; } });
         form.addDouble("Auto end run after idle, s", "0 = manual", new Form.DoubleGet() { public double get() { return cfg.autoEndRunIdleSec; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.autoEndRunIdleSec = v; } });
-        JPanel goalsPanel = new JPanel(new BorderLayout());
-        goalsPanel.add(goals.panel(), BorderLayout.NORTH);
-        JPanel advancedRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        // one vertical page (goals, advanced toggle, advanced form, buttons) inside a scroll pane: when the
+        // window is short the page scrolls instead of the rows being painted over each other
+        JPanel page = new JPanel(new java.awt.GridBagLayout());
+        java.awt.GridBagConstraints gc = new java.awt.GridBagConstraints();
+        gc.gridx = 0;
+        gc.weightx = 1;
+        gc.fill = java.awt.GridBagConstraints.HORIZONTAL;
+        gc.anchor = java.awt.GridBagConstraints.NORTHWEST;
+        page.add(goals.panel(), gc);
+        JPanel advancedRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 4));
         advancedRow.add(advanced);
-        goalsPanel.add(advancedRow, BorderLayout.SOUTH);
-        tune.add(goalsPanel, BorderLayout.NORTH);
-        advancedScroll = new JScrollPane(form.panel());
-        advancedScroll.setVisible(false);
-        tune.add(advancedScroll, BorderLayout.CENTER);
-        JPanel tuneButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton applyBtn = new JButton("Apply");
+        page.add(advancedRow, gc);
+        advancedForm = form.panel();
+        advancedForm.setVisible(false);
+        page.add(advancedForm, gc);
+        JPanel tuneButtons = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 4));
+        applyBtn = new JButton("Apply");
         tuneButtons.add(applyBtn);
         tuneButtons.add(status);
-        tune.add(tuneButtons, BorderLayout.SOUTH);
+        page.add(tuneButtons, gc);
+        gc.weighty = 1;
+        gc.fill = java.awt.GridBagConstraints.BOTH;
+        page.add(new JPanel(), gc); // soaks up the spare height so the rows stay at the top
+        tune.add(new JScrollPane(page), BorderLayout.CENTER);
         advanced.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                advancedScroll.setVisible(advanced.isSelected());
+                advancedForm.setVisible(advanced.isSelected());
                 tune.revalidate();
             }
         });
 
+        presets.setMinimumSize(new java.awt.Dimension(0, 120));
+        tune.setMinimumSize(new java.awt.Dimension(0, 120));
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, presets, tune);
-        split.setResizeWeight(0.6);
+        split.setResizeWeight(0.5);
         add(split, BorderLayout.CENTER);
 
         loadBtn.addActionListener(new ActionListener() {
@@ -507,5 +517,18 @@ public final class AntilagPanel extends JPanel {
 
     public boolean advancedShown() {
         return advanced.isSelected();
+    }
+
+    // ---- for layout checks ----
+    public JButton applyButton() {
+        return applyBtn;
+    }
+
+    public JCheckBox advancedCheckbox() {
+        return advanced;
+    }
+
+    public JTable presetTable() {
+        return table;
     }
 }

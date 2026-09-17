@@ -43,7 +43,7 @@ public final class Form {
     }
 
     public JTextField addDouble(final String label, String tooltip, final DoubleGet get, final DoubleSet set) {
-        final JTextField tf = new JTextField(8);
+        final JTextField tf = new JTextField(7);
         tf.setToolTipText(tooltip);
         add(label, tf, tooltip);
         fields.add(new Field() {
@@ -65,7 +65,7 @@ public final class Form {
 
     /** A number field where an empty box means "not set" (NaN). */
     public JTextField addOptionalDouble(final String label, String tooltip, final DoubleGet get, final DoubleSet set) {
-        final JTextField tf = new JTextField(8);
+        final JTextField tf = new JTextField(7);
         tf.setToolTipText(tooltip);
         add(label, tf, tooltip);
         fields.add(new Field() {
@@ -91,7 +91,7 @@ public final class Form {
     }
 
     public JTextField addText(String label, String tooltip, final TextGet get, final TextSet set) {
-        final JTextField tf = new JTextField(14);
+        final JTextField tf = new JTextField(10);
         tf.setToolTipText(tooltip);
         add(label, tf, tooltip);
         fields.add(new Field() {
@@ -126,20 +126,27 @@ public final class Form {
         add(label, comp, null);
     }
 
+    /** Width of the label column in pixels: long labels wrap instead of pushing the fields off screen. */
+    static final int LABEL_WIDTH_PX = 280;
+
     private void add(String label, JComponent comp, String tooltip) {
-        JLabel l = new JLabel(label);
-        if (tooltip != null) {
+        JLabel l = new JLabel("<html><body style='width: " + LABEL_WIDTH_PX + "px'>" + escape(label) + "</body></html>");
+        if (tooltip != null && !tooltip.isEmpty()) {
             l.setToolTipText(tooltip);
+            comp.setToolTipText(tooltip);
         }
         GridBagConstraints c = gbc(0, row, 1);
-        c.anchor = GridBagConstraints.EAST;
+        c.anchor = GridBagConstraints.NORTHWEST;
         panel.add(l, c);
         c = gbc(1, row, 1);
-        c.anchor = GridBagConstraints.WEST;
-        c.fill = GridBagConstraints.HORIZONTAL;
+        c.anchor = GridBagConstraints.NORTHWEST;
         c.weightx = 1;
         panel.add(comp, c);
         row++;
+    }
+
+    private static String escape(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private static GridBagConstraints gbc(int x, int y, int w) {

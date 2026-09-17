@@ -110,7 +110,7 @@ public final class VvtPanel extends JPanel {
                 new Form.DoubleSet() { public void set(double v) { pid.runsRequired = (int) Math.max(1, v); } });
 
         add(new JScrollPane(form.panel()), BorderLayout.CENTER);
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel buttons = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 4));
         JButton applyBtn = new JButton("Apply");
         buttons.add(applyBtn);
         buttons.add(status);
