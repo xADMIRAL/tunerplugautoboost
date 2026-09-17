@@ -40,6 +40,7 @@ public final class AutotunePanel extends JPanel {
             "VVT angle", "VVT target", "Advance", "Knock rtd", "AFR", "Sample", "Pulls / peak", "MAT °C", "Anti-lag"};
     private final JLabel[] live = new JLabel[LIVE_NAMES.length];
     private final JPanel[] liveCells = new JPanel[LIVE_NAMES.length];
+    private Color cardBg;
     private final JTextArea report = new JTextArea(14, 80);
     private final JButton startSession = new JButton("Start session");
     private final JButton writePlan = new JButton("Write plan to ECU");
@@ -89,13 +90,24 @@ public final class AutotunePanel extends JPanel {
         instructions.setBackground(getBackground());
         top.add(instructions, gc);
 
-        JPanel liveRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 10, 2));
+        // the live cells paint their own background and text colours: the host's theme (TunerStudio is
+        // dark) must not be able to hide them
+        JPanel liveRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 4));
+        Color card = Palette.cardOn(Palette.panel());
+        cardBg = card;
         for (int i = 0; i < live.length; i++) {
-            JPanel cell = new JPanel(new BorderLayout());
+            JPanel cell = new JPanel(new BorderLayout(0, 1));
+            cell.setOpaque(true);
+            cell.setBackground(card);
+            cell.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(Palette.dimTextOn(card), 1),
+                    BorderFactory.createEmptyBorder(2, 6, 2, 6)));
             JLabel n = new JLabel(LIVE_NAMES[i]);
             n.setFont(n.getFont().deriveFont(10f));
+            n.setForeground(Palette.dimTextOn(card));
             live[i] = new JLabel("-");
             live[i].setFont(live[i].getFont().deriveFont(Font.BOLD, 15f));
+            live[i].setForeground(Palette.textOn(card));
             cell.add(n, BorderLayout.NORTH);
             cell.add(live[i], BorderLayout.CENTER);
             liveCells[i] = cell;
@@ -223,6 +235,10 @@ public final class AutotunePanel extends JPanel {
         };
     }
 
+    public JLabel stateLabel() {
+        return stateLabel;
+    }
+
     /** Live value labels and their cells (layout checks). */
     public JLabel[] liveLabels() {
         return live;
@@ -253,7 +269,8 @@ public final class AutotunePanel extends JPanel {
         SessionState st = ctl.state();
         String phase = ctl.driver() == null ? "" : " / " + ctl.phase();
         stateLabel.setText("State: " + st + phase + (st == SessionState.ABORTED ? " - " + ctl.abortReason() : ""));
-        stateLabel.setForeground(st == SessionState.ABORTED ? Color.RED : st == SessionState.DONE ? new Color(0, 130, 0) : Color.BLACK);
+        Color bg = Palette.panel();
+        stateLabel.setForeground(st == SessionState.ABORTED ? Palette.badOn(bg) : st == SessionState.DONE ? Palette.goodOn(bg) : Palette.text());
         if (ctl.driver() == null) {
             planLabel.setText("Pick a mode, check its settings tab and Setup, then press Start session.");
             instructions.setText("");
@@ -303,16 +320,17 @@ public final class AutotunePanel extends JPanel {
         live[8].setText(fmt(x.vvtTarget, "%.1f"));
         live[9].setText(fmt(x.advance, "%.1f"));
         live[10].setText(fmt(x.knockRetard, "%.1f"));
-        live[10].setForeground(!Double.isNaN(x.knockRetard) && x.knockRetard > 0 ? Color.RED : Color.BLACK);
+        Color card = cardBg;
+        live[10].setForeground(!Double.isNaN(x.knockRetard) && x.knockRetard > 0 ? Palette.badOn(card) : Palette.textOn(card));
         live[11].setText(fmt(x.afr, "%.1f"));
         live[12].setText(st == null ? "-" : st.label());
-        live[12].setForeground(st == SampleState.STEADY ? new Color(0, 130, 0) : st == SampleState.OVERBOOST ? Color.RED : Color.DARK_GRAY);
+        live[12].setForeground(st == SampleState.STEADY ? Palette.goodOn(card) : st == SampleState.OVERBOOST ? Palette.badOn(card) : Palette.dimTextOn(card));
         double peak = ctl.runPeak();
         live[13].setText(ctl.pullsInRun() + (Double.isNaN(peak) ? "" : String.format(Locale.US, " / %.0f", peak)));
         live[14].setText(fmt(x.mat, "%.0f"));
-        live[14].setForeground(!Double.isNaN(x.mat) && x.mat >= 70 ? Color.RED : Color.BLACK);
+        live[14].setForeground(!Double.isNaN(x.mat) && x.mat >= 70 ? Palette.badOn(card) : Palette.textOn(card));
         live[15].setText(x.alsActive ? "ACTIVE" : "-");
-        live[15].setForeground(x.alsActive ? new Color(200, 90, 0) : Color.BLACK);
+        live[15].setForeground(x.alsActive ? Palette.warnOn(card) : Palette.textOn(card));
     }
 
     private static String fmt(double v, String f) {

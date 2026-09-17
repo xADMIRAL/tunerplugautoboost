@@ -206,7 +206,9 @@ public final class AnalysisPanel extends JPanel {
                 if (d > 0.05) bg = new Color(200, 225, 255);
                 else if (d < -0.05) bg = new Color(255, 215, 215);
             }
+            // the cell paints a light background of its own, so its text must be dark whatever the theme
             c.setBackground(sel ? bg.darker() : bg);
+            c.setForeground(Palette.textOn(bg));
             return c;
         }
     }

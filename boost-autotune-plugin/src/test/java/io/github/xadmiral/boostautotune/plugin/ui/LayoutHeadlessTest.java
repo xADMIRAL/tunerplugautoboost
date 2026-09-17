@@ -112,4 +112,49 @@ class LayoutHeadlessTest {
         });
         f.delete();
     }
+
+    /** A dark host theme (TunerStudio's) must not hide the live values or the state line. */
+    @Test
+    void liveValuesReadableOnADarkTheme() throws Exception {
+        final java.awt.Color dark = new java.awt.Color(43, 43, 43);
+        final java.awt.Color light = new java.awt.Color(220, 220, 220);
+        final String[] bgKeys = {"Panel.background", "Viewport.background", "TextArea.background"};
+        final String[] fgKeys = {"Label.foreground", "TextArea.foreground", "TitledBorder.titleColor"};
+        final Object[] savedBg = new Object[bgKeys.length];
+        final Object[] savedFg = new Object[fgKeys.length];
+        for (int i = 0; i < bgKeys.length; i++) { savedBg[i] = javax.swing.UIManager.get(bgKeys[i]); javax.swing.UIManager.put(bgKeys[i], dark); }
+        for (int i = 0; i < fgKeys.length; i++) { savedFg[i] = javax.swing.UIManager.get(fgKeys[i]); javax.swing.UIManager.put(fgKeys[i], light); }
+        try {
+            final File f = File.createTempFile("boost-autotune-dark", ".properties");
+            f.delete();
+            final MainPanel[] holder = new MainPanel[1];
+            SwingUtilities.invokeAndWait(new Runnable() {
+                public void run() {
+                    holder[0] = new MainPanel(new SimEcuPort(), new SettingsStore(f));
+                    holder[0].autotunePanel().updateState();
+                }
+            });
+            AutotunePanel a = holder[0].autotunePanel();
+            JLabel[] live = a.liveLabels();
+            JPanel[] cells = a.liveCells();
+            for (int i = 0; i < live.length; i++) {
+                assertTrue(cells[i].isOpaque(), "live cell paints its own background");
+                double contrast = Math.abs(Palette.luminance(live[i].getForeground()) - Palette.luminance(cells[i].getBackground()));
+                assertTrue(contrast > 0.5, String.format("live '%s': foreground %s on %s has contrast %.2f",
+                        live[i].getText(), live[i].getForeground(), cells[i].getBackground(), contrast));
+            }
+            JLabel state = a.stateLabel();
+            double contrast = Math.abs(Palette.luminance(state.getForeground()) - Palette.luminance(dark));
+            assertTrue(contrast > 0.5, "state line " + state.getForeground() + " on the dark panel");
+            SwingUtilities.invokeAndWait(new Runnable() {
+                public void run() {
+                    holder[0].dispose();
+                }
+            });
+            f.delete();
+        } finally {
+            for (int i = 0; i < bgKeys.length; i++) { javax.swing.UIManager.put(bgKeys[i], savedBg[i]); }
+            for (int i = 0; i < fgKeys.length; i++) { javax.swing.UIManager.put(fgKeys[i], savedFg[i]); }
+        }
+    }
 }
