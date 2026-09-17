@@ -188,6 +188,42 @@ Launch/Flatshift` + `launchlimopt = Spark Cut`, `OvrRunC = Off` (отсечка 
 охлаждения между ними, исправный датчик температуры во впуске и система охлаждения обязательны.
 Не для улицы.
 
+## Дашборды TunerStudio
+
+В папке `dash/` три готовых дашборда для Stealth PCM (подпись прошивки берётся из вашего файла,
+сейчас `MS3 Format DM00.23f`; для другой версии перегенерируйте — см. ниже). Загружаются в
+TunerStudio: правый клик по дашборду → *Load Dashboard…* (или меню Dashboard) → выбрать файл.
+Внешний вид (безель, стрелка, шрифт) взят из вашего дашборда, фон тёмный.
+
+* **`track_boost.dash` — настройка по трассе.** Большие RPM, MAP и AFR; справа цифры: цель буста
+  `boost_targ_1`, скважность `boostduty`, опережение, knock retard, CLT, MAT, EGT, давление масла и
+  топлива, напряжение, угол VVT и цель. Во втором ряду циферблаты knock retard, EGT, давление масла
+  и boost duty; линии TPS, MAP, цели буста и скважности. Внизу индикаторы лимитеров и защит:
+  overboost, spark cut, fuel cut, soft limiter, knock, closed-loop буста, launch, flat shift, ALS,
+  и ошибки (AFR/EGT shutdown, масло, давление топлива, датчик детонации, MAP, sync, need burn,
+  config error).
+* **`idle_injectors_throttle.dash` — холостой ход, форсунки, дроссель.** RPM в мелкой шкале
+  0–4000, duty форсунок `dcseq1` и AFR большими; справа цель холостого `cl_idle_targ_rpm`, шаги и
+  скважность РХХ, коррекция closed-loop холостого, ширина импульса, VE, EGO-коррекция, цель AFR,
+  прогревное и ускорительное обогащение, dwell, напряжение. Второй ряд: EGO-коррекция, MAP, CLT,
+  MAT; линии TPS, педали и цели дросселя (DBW), скорости TPS/MAP, барометр. Индикаторы: CL idle,
+  idle VE/adv, idle-up, кондиционер, вентилятор, TPS/MAP accel и decel, ready/cranking/warmup,
+  отсечка на сбросе газа, DBW, ошибки TPS/CLT, need burn.
+* **`drift_antilag.dash` — дрифт и антилаг.** RPM, MAP и MAT большими (MAT с предупреждением
+  65 °C и красной зоной 80 °C, как в автотюне антилага); справа EGT, угол зажигания (видно
+  запаздывание ALS), цель и скважность буста, AFR, knock retard, CLT, давление масла и топлива,
+  напряжение, шаги РХХ, передача. Второй ряд: EGT, зажигание, AFR, давление масла; линии TPS, MAP,
+  MAT, EGT. Индикаторы: ALS ACTIVE, launch, flat shift, spark/fuel cut, overboost, soft limiter,
+  knock; ошибки по температуре и давлению.
+
+Индикаторы битов состояния используют каналы вида `status2AND64_OC`, которые TunerStudio создаёт
+из индикаторов INI (`{ status2 & 64 }`); они есть в проекте с этой прошивкой. Перегенерация под
+другую подпись или после правок раскладки:
+
+```
+python3 dash/generate_dashboards.py <любой ваш .dash с безелем и стрелкой> ["MS3 Format DM00.24f"]
+```
+
 ## Установка
 
 Требуется TunerStudio с поддержкой плагинов (TunerStudio MS 3.x; API плагинов 1.0).
@@ -294,6 +330,7 @@ boost-autotune-plugin/  Swing UI и связка с TunerStudio
   BoostAutotunePlugin   точка входа (манифест: ApplicationPlugin)
   DemoLauncher          запуск UI с симулятором
 repo/                   вендоренный TunerStudioPluginAPI.jar (только для компиляции)
+dash/                   три дашборда TunerStudio (трасса, холостой ход / форсунки / дроссель, дрифт) и их генератор
 ```
 
 Тесты: `mvn test` — юнит-тесты компонентов, сквозные тесты на симуляторе (буст, VVT-перебор,

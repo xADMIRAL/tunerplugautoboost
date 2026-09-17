@@ -73,6 +73,17 @@ The **Anti-lag** tab: a drift mode, three autotune goals, and advanced settings 
 Anti-lag cooks the turbo, the manifold and the catalyst: short runs, cool-down laps, a working
 intake air temperature sensor. Not for the street.
 
+## TunerStudio dashboards
+
+`dash/` holds three ready dashboards for the Stealth PCM (firmware signature taken from your own
+dashboard file, currently `MS3 Format DM00.23f`): `track_boost.dash` (road tuning: RPM, MAP, AFR,
+boost target and duty, timing, knock, temperatures, pressures, limiter and fault indicators),
+`idle_injectors_throttle.dash` (idle target and valve, injector duty and pulse width, VE, EGO
+correction, throttle / pedal / DBW target, accel enrichment and idle state indicators) and
+`drift_antilag.dash` (RPM, MAP, MAT with the anti-lag limits, EGT, timing, ALS / launch / flat
+shift and cut indicators). Load one with a right click on a dashboard → *Load Dashboard…*.
+Regenerate for another signature with `python3 dash/generate_dashboards.py your.dash "MS3 Format …"`.
+
 ## Install
 
 Copy `BoostAutotune.jar` to `~/.efianalytics/TunerStudio/plugins/` (Windows:
