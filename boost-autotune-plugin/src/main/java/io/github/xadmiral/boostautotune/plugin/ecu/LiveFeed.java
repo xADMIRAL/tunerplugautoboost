@@ -40,6 +40,12 @@ public final class LiveFeed implements EcuPort.ChannelListener {
                 out.add(c);
             }
         }
+        if (b.has(b.knockCylChannelPrefix)) {
+            // the controller drops the ones this ECU does not have
+            for (int c = 1; c <= 8; c++) {
+                out.add(b.knockCylChannel(c));
+            }
+        }
         return out;
     }
 
@@ -76,6 +82,21 @@ public final class LiveFeed implements EcuPort.ChannelListener {
             double v = get(b.alsActiveChannel, 0);
             als = b.alsActiveMask == 0 ? v != 0 : (((long) v) & b.alsActiveMask) != 0;
         }
+        double[] cyl = null;
+        if (b.has(b.knockCylChannelPrefix)) {
+            int n = 0;
+            for (int c = 1; c <= 8; c++) {
+                if (values.containsKey(b.knockCylChannel(c))) {
+                    n = c;
+                }
+            }
+            if (n > 0) {
+                cyl = new double[n];
+                for (int c = 1; c <= n; c++) {
+                    cyl[c - 1] = get(b.knockCylChannel(c), Double.NaN);
+                }
+            }
+        }
         return Sample.builder()
                 .time(t)
                 .rpm(get(b.rpmChannel, 0))
@@ -96,6 +117,7 @@ public final class LiveFeed implements EcuPort.ChannelListener {
                 .afr(optional(b.afrChannel))
                 .mat(optional(b.matChannel))
                 .alsActive(als)
+                .knockCyl(cyl)
                 .build();
     }
 

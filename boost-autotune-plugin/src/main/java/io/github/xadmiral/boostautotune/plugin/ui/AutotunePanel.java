@@ -37,7 +37,7 @@ public final class AutotunePanel extends JPanel {
     private final JLabel planLabel = new JLabel(" ");
     private final JTextArea instructions = new JTextArea(2, 60);
     private static final String[] LIVE_NAMES = {"RPM", "TPS %", "MAP kPa", "Boost tgt", "Boost duty", "CLT °C", "Gear",
-            "VVT angle", "VVT target", "Advance", "Knock rtd", "AFR", "Sample", "Pulls / peak", "MAT °C", "Anti-lag"};
+            "VVT angle", "VVT target", "Advance", "Knock rtd", "AFR", "Sample", "Pulls / peak", "MAT °C", "Anti-lag", "Knock %"};
     private final JLabel[] live = new JLabel[LIVE_NAMES.length];
     private final JPanel[] liveCells = new JPanel[LIVE_NAMES.length];
     private Color cardBg;
@@ -331,6 +331,8 @@ public final class AutotunePanel extends JPanel {
         live[14].setForeground(!Double.isNaN(x.mat) && x.mat >= 70 ? Palette.badOn(card) : Palette.textOn(card));
         live[15].setText(x.alsActive ? "ACTIVE" : "-");
         live[15].setForeground(x.alsActive ? Palette.warnOn(card) : Palette.textOn(card));
+        live[16].setText(fmt(x.knock, "%.0f"));
+        live[16].setForeground(!Double.isNaN(x.knock) && x.knock >= 90 ? Palette.badOn(card) : Palette.textOn(card));
     }
 
     private static String fmt(double v, String f) {

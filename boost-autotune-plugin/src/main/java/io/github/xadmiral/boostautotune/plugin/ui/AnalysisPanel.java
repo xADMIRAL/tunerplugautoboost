@@ -74,6 +74,7 @@ public final class AnalysisPanel extends JPanel {
         for (TableView v : views) {
             GridTableModel model = new GridTableModel();
             model.setYLabel(v.yLabel);
+            model.setFormat(v.format);
             model.setGrid(v.next, v.reference);
             JTable table = new JTable(model);
             table.setDefaultRenderer(Object.class, new CellRenderer(model, v.quality));

@@ -36,6 +36,8 @@ public final class Sample {
     public final double mat;
     /** True while the ECU reports its anti-lag system as active. */
     public final boolean alsActive;
+    /** Per-cylinder knock levels (firmware units), null when the ECU does not report them. */
+    public final double[] knockCyl;
 
     private Sample(Builder b) {
         this.timeSec = b.timeSec;
@@ -59,6 +61,7 @@ public final class Sample {
         this.afrTarget = b.afrTarget;
         this.mat = b.mat;
         this.alsActive = b.alsActive;
+        this.knockCyl = b.knockCyl == null ? null : b.knockCyl.clone();
     }
 
     public static Builder builder() {
@@ -106,6 +109,7 @@ public final class Sample {
         private double afrTarget = Double.NaN;
         private double mat = Double.NaN;
         private boolean alsActive;
+        private double[] knockCyl;
 
         public Builder time(double t) { this.timeSec = t; return this; }
         public Builder rpm(double v) { this.rpm = v; return this; }
@@ -128,6 +132,7 @@ public final class Sample {
         public Builder afrTarget(double v) { this.afrTarget = v; return this; }
         public Builder mat(double v) { this.mat = v; return this; }
         public Builder alsActive(boolean v) { this.alsActive = v; return this; }
+        public Builder knockCyl(double[] v) { this.knockCyl = v; return this; }
 
         public Sample build() {
             return new Sample(this);

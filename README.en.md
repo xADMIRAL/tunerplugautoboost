@@ -75,6 +75,30 @@ The **Anti-lag** tab: a drift mode, three autotune goals, and advanced settings 
 Anti-lag cooks the turbo, the manifold and the catalyst: short runs, cool-down laps, a working
 intake air temperature sensor. Not for the street.
 
+## Knock sensor calibration
+
+**Knock: sensor calibration** (the **Knock** tab) sets the knock input itself: the per-cylinder
+gains `knock_gain01..06` and the threshold curve `knock_thresholds` over `knock_rpms`. A run is
+2-3 full-throttle pulls on a timing map that does not knock; everything the sensor hears is taken
+as the engine's noise, collected per RPM bin (per cylinder from `knock_cyl01..06` when the ECU
+links knock to cylinders) at load >= `knk_minload` inside `knk_lorpm..knk_hirpm`.
+
+* **Survey (gains).** The loudest bin / cylinder is brought to a 40 % (30..55) noise level,
+  each gain moving by at most x2 per run to the nearest `$KNOCK_GAIN` option; a cylinder more
+  than 20 % quieter than the loudest one is turned up so one curve fits all. The thresholds scale
+  with the gains meanwhile, so the protection stays what it was.
+* **Verify (thresholds).** Threshold = noise p95 x 1.3 (at least the loudest plain sample + 3)
+  per bin, unmeasured bins from their neighbours, smoothed so no bin dips under its neighbours.
+  Then more pulls: a bin whose plain samples cross the threshold (one stray sample is tolerated)
+  or where the ECU's knock retard fired is raised 10 %; a bin far above the noise is tightened
+  once. Done after two clean runs in a row.
+
+Isolated spikes (> 1.35 x median + 3) are reported as possible knock and kept out of the noise;
+a bin with three or more keeps its threshold and the session asks for the timing map to be fixed.
+The Analysis tab shows the curve and the per-cylinder gains before / after; *Restore original*
+puts both back. It cannot tell a bad sensor or a knocking engine from a noisy one: listen too.
+Frequency, window and integrator settings are not touched.
+
 ## TunerStudio dashboards
 
 `dash/` holds three ready dashboards for the Stealth PCM (firmware signature taken from your own

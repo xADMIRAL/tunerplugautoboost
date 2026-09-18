@@ -136,6 +136,57 @@ public final class SimEcu {
     private double advance;
     private double knockLevel;
 
+    // ---- knock input: engine noise per cylinder through the sensor gains, an ECU threshold curve ----
+    /** Off = the legacy "level jumps when the engine knocks" model used by the ignition sweep tests. */
+    public boolean knockNoiseEnabled;
+    /** Gain per cylinder (1.0 = the raw noise, in % of full scale, as modelled). */
+    public double[] knockGains = {1, 1, 1, 1, 1, 1};
+    /** How loud each cylinder is at the sensor relative to the others. */
+    public double[] knockCylFactor = {1.0, 0.9, 1.15, 1.0, 0.85, 1.2};
+    public double[] knockRpmBins = {2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 7000};
+    public double[] knockThresholds = {33, 40, 42, 45, 45, 45, 45, 45, 50, 50};
+    public double knockMinLoad = 80;
+    public double knockLoRpm = 1500;
+    public double knockHiRpm = 7000;
+    public double knockCheckSec = 0.2;
+    /** Knock events needed inside one check window before the ECU retards (MS3 knk_ndet). */
+    public int knockDetectCount = 2;
+    private final double[] knockCylLevels = new double[8];
+    private int knockSeen;
+    private final java.util.Random knockRandom = new java.util.Random(777);
+
+    /** Per-cylinder knock input levels of the last step (the modelled noise model only). */
+    public double[] knockCylLevels() {
+        int n = Math.min(knockGains.length, knockCylFactor.length);
+        double[] out = new double[n];
+        System.arraycopy(knockCylLevels, 0, out, 0, n);
+        return out;
+    }
+
+    /** Mechanical noise at the sensor for gain 1.0, % of full scale: rises with RPM, halves off load. */
+    double knockRawNoise(double rpm, double tps) {
+        double x = Stats.clamp((rpm - 1000) / 6000.0, 0, 1);
+        double base = 18 + 55 * Math.pow(x, 1.4);
+        return tps >= 85 ? base : 0.5 * base;
+    }
+
+    /** ECU threshold at an RPM: linear between the curve's bins, flat outside. */
+    public double knockThresholdAt(double rpm) {
+        if (knockRpmBins == null || knockThresholds == null || knockRpmBins.length == 0) {
+            return 50;
+        }
+        if (rpm <= knockRpmBins[0]) {
+            return knockThresholds[0];
+        }
+        for (int i = 1; i < knockRpmBins.length; i++) {
+            if (rpm <= knockRpmBins[i]) {
+                double t = (rpm - knockRpmBins[i - 1]) / (knockRpmBins[i] - knockRpmBins[i - 1]);
+                return Stats.lerp(knockThresholds[i - 1], knockThresholds[i], t);
+            }
+        }
+        return knockThresholds[knockThresholds.length - 1];
+    }
+
     public SimEcu(EcuState state) {
         apply(state);
     }
@@ -203,6 +254,8 @@ public final class SimEcu {
         knockRetard = 0;
         knockTimer = 0;
         knockLevel = 0;
+        knockSeen = 0;
+        java.util.Arrays.fill(knockCylLevels, 0);
     }
 
     /** Advances the cam phaser model one control step. */
@@ -245,13 +298,43 @@ public final class SimEcu {
         double commanded = sparkTable.lookup(rpm, ignLoad);
         double limit = torque.knockLimit(rpm, ignLoad);
         boolean knocking = tps >= 85 && commanded - knockRetard > limit;
-        knockLevel = knocking ? Stats.clamp(30 + (commanded - knockRetard - limit) * 20, 30, 100) : 5;
+        if (!knockNoiseEnabled) {
+            knockLevel = knocking ? Stats.clamp(30 + (commanded - knockRetard - limit) * 20, 30, 100) : 5;
+            knockTimer += dt;
+            if (knocking && knockTimer >= 0.2) {
+                knockRetard = Math.min(knockMaxRetard, knockRetard + knockRetardStep);
+                knockTimer = 0;
+            } else if (!knocking && knockRetard > 0) {
+                knockRetard = Math.max(0, knockRetard - knockRecoverPerSec * dt);
+            }
+            advance = commanded - knockRetard;
+            return advance;
+        }
+        // noise per cylinder through its gain, real knock on top, the ECU's own threshold decides
+        double raw = knockRawNoise(rpm, tps);
+        double knockRaw = knocking ? 60 + (commanded - knockRetard - limit) * 20 : 0;
+        int n = Math.min(knockGains.length, knockCylFactor.length);
+        knockLevel = 0;
+        for (int c = 0; c < n; c++) {
+            double jitter = 1 + 0.12 * knockRandom.nextGaussian();
+            double spike = knockRandom.nextDouble() < 0.003 ? 1.5 : 1.0;
+            double level = (raw * jitter * spike + knockRaw) * knockCylFactor[c] * knockGains[c];
+            knockCylLevels[c] = Stats.clamp(level, 0, 100);
+            knockLevel = Math.max(knockLevel, knockCylLevels[c]);
+        }
+        boolean trigger = rpm >= knockLoRpm && rpm <= knockHiRpm && ignLoad >= knockMinLoad && knockLevel >= knockThresholdAt(rpm);
+        if (trigger) {
+            knockSeen++;
+        }
         knockTimer += dt;
-        if (knocking && knockTimer >= 0.2) {
-            knockRetard = Math.min(knockMaxRetard, knockRetard + knockRetardStep);
+        if (knockTimer >= knockCheckSec) {
+            if (knockSeen >= knockDetectCount) {
+                knockRetard = Math.min(knockMaxRetard, knockRetard + knockRetardStep);
+            } else if (knockRetard > 0) {
+                knockRetard = Math.max(0, knockRetard - knockRecoverPerSec * knockCheckSec);
+            }
+            knockSeen = 0;
             knockTimer = 0;
-        } else if (!knocking && knockRetard > 0) {
-            knockRetard = Math.max(0, knockRetard - knockRecoverPerSec * dt);
         }
         advance = commanded - knockRetard;
         return advance;

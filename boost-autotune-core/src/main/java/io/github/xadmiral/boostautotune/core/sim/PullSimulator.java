@@ -175,6 +175,9 @@ public final class PullSimulator {
         }
         if (ecu.sparkTable != null) {
             b.advance(adv).knock(ecu.knockLevel()).knockRetard(ecu.knockRetard()).afr(tps >= 85 ? 11.8 : 14.7).afrTarget(tps >= 85 ? 11.8 : 14.7);
+            if (ecu.knockNoiseEnabled) {
+                b.knockCyl(ecu.knockCylLevels());
+            }
         }
         if (ecu.alsTiming != null) {
             b.alsActive(ecu.alsActive()).mat(ecu.mat());

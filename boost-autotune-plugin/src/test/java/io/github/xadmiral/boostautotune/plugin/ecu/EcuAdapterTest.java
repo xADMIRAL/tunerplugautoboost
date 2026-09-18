@@ -174,6 +174,54 @@ class EcuAdapterTest {
     }
 
     @Test
+    void knockCalibrationRoundTrip() throws Exception {
+        SimEcuPort port = new SimEcuPort();
+        EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
+        EcuAdapter a = new EcuAdapter(port, b);
+        assertTrue(b.validateKnock(port.channelNames(SimEcuPort.CONFIG), port.parameterNames(SimEcuPort.CONFIG)).isEmpty());
+        assertEquals(10, a.readKnockRpmBins().length);
+        assertEquals(2000, a.readKnockRpmBins()[0], 1e-9);
+        assertEquals(33, a.readKnockThresholds()[0], 1e-9);
+        assertEquals(6, a.cylinders());
+        assertTrue(a.knockPerCylinder());
+        List<String> gp = a.knockGainParams(6, true);
+        assertEquals(6, gp.size());
+        assertEquals("knock_gain01", gp.get(0));
+        assertEquals("knock_gain06", gp.get(5));
+        assertEquals(64, a.knockGainOptions(gp).length);
+        double[] g = a.readKnockGains(gp);
+        assertEquals(0.421, g[0], 1e-9);
+        a.writeKnockGains(gp, new double[]{0.47, 0.35, 0.421, 0.421, 0.421, 3.0});
+        assertEquals("0.471", port.readOption(SimEcuPort.CONFIG, "knock_gain01"));
+        assertEquals("0.348", port.readOption(SimEcuPort.CONFIG, "knock_gain02"));
+        assertEquals("2.000", port.readOption(SimEcuPort.CONFIG, "knock_gain06"));
+        double[] thr = a.readKnockThresholds();
+        thr[2] = 55;
+        a.writeKnockThresholds(thr);
+        assertEquals(55, port.readArray1D(SimEcuPort.CONFIG, b.knockThresholdTable)[2], 1e-9);
+        assertEquals(80, a.readKnockMinLoad(), 1e-9);
+        assertEquals(1500, a.readKnockLoRpm(), 1e-9);
+        assertEquals(7000, a.readKnockHiRpm(), 1e-9);
+        assertEquals("Safe Mode", a.readKnockControl());
+        assertEquals(6, a.knockCylChannels(6).size());
+        assertEquals("knock_cyl01", a.knockCylChannels(6).get(0));
+        assertEquals(0, a.knockThresholdInfo().min, 1e-9);
+        assertEquals(100, a.knockThresholdInfo().max, 1e-9);
+        // per-cylinder off: one gain only
+        port.writeOption(SimEcuPort.CONFIG, b.knockPerCylParam, "Off");
+        assertFalse(a.knockPerCylinder());
+        assertEquals(1, a.knockGainParams(6, a.knockPerCylinder()).size());
+        // binding round trip keeps the knock names
+        Properties p = new Properties();
+        b.store(p, "k.");
+        EcuBinding c = new EcuBinding();
+        c.load(p, "k.");
+        assertEquals("knock_thresholds", c.knockThresholdTable);
+        assertEquals("knock_gain03", c.knockGainParam(3));
+        assertEquals("knock_cyl04", c.knockCylChannel(4));
+    }
+
+    @Test
     void driveByWireSwitchesTheAntilagAirKnobToTheThrottle() throws Exception {
         SimEcuPort port = new SimEcuPort();
         EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);

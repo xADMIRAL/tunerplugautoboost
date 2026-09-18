@@ -2,6 +2,7 @@ package io.github.xadmiral.boostautotune.plugin.settings;
 
 import io.github.xadmiral.boostautotune.core.als.AlsConfig;
 import io.github.xadmiral.boostautotune.core.config.AutotuneConfig;
+import io.github.xadmiral.boostautotune.core.knock.KnockCalConfig;
 import io.github.xadmiral.boostautotune.core.sweep.SweepConfig;
 import io.github.xadmiral.boostautotune.core.vvt.VvtPidConfig;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuBinding;
@@ -49,6 +50,11 @@ public final class SettingsStore {
 
     public void save(AutotuneConfig cfg, SweepConfig vvtSweep, SweepConfig ignSweep, VvtPidConfig vvtPid, AlsConfig als,
                      EcuBinding binding, Properties uiPrefs) throws IOException {
+        save(cfg, vvtSweep, ignSweep, vvtPid, als, null, binding, uiPrefs);
+    }
+
+    public void save(AutotuneConfig cfg, SweepConfig vvtSweep, SweepConfig ignSweep, VvtPidConfig vvtPid, AlsConfig als,
+                     KnockCalConfig knock, EcuBinding binding, Properties uiPrefs) throws IOException {
         Properties p = new Properties();
         configTo(cfg, p, "tune.");
         if (vvtSweep != null) {
@@ -62,6 +68,9 @@ public final class SettingsStore {
         }
         if (als != null) {
             alsTo(als, p, "als.");
+        }
+        if (knock != null) {
+            knockTo(knock, p, "knock.");
         }
         binding.store(p, "ecu.");
         if (uiPrefs != null) {
@@ -110,6 +119,11 @@ public final class SettingsStore {
 
     public void load(AutotuneConfig cfg, SweepConfig vvtSweep, SweepConfig ignSweep, VvtPidConfig vvtPid, AlsConfig als,
                      EcuBinding binding, Properties uiPrefs) throws IOException {
+        load(cfg, vvtSweep, ignSweep, vvtPid, als, null, binding, uiPrefs);
+    }
+
+    public void load(AutotuneConfig cfg, SweepConfig vvtSweep, SweepConfig ignSweep, VvtPidConfig vvtPid, AlsConfig als,
+                     KnockCalConfig knock, EcuBinding binding, Properties uiPrefs) throws IOException {
         Properties p = loadRaw();
         configFrom(cfg, p, "tune.");
         if (vvtSweep != null) {
@@ -123,6 +137,9 @@ public final class SettingsStore {
         }
         if (als != null) {
             alsFrom(als, p, "als.");
+        }
+        if (knock != null) {
+            knockFrom(knock, p, "knock.");
         }
         binding.load(p, "ecu.");
         if (uiPrefs != null) {
@@ -431,6 +448,56 @@ public final class SettingsStore {
         c.maxActiveSecPerRun = d(p, pre + "maxActiveSecPerRun", c.maxActiveSecPerRun);
         c.respoolTargetKpa = d(p, pre + "respoolTargetKpa", c.respoolTargetKpa);
         c.respoolMaxSec = d(p, pre + "respoolMaxSec", c.respoolMaxSec);
+        c.runsRequired = (int) d(p, pre + "runsRequired", c.runsRequired);
+        c.autoEndRunIdleSec = d(p, pre + "autoEndRunIdleSec", c.autoEndRunIdleSec);
+    }
+
+    public static void knockTo(KnockCalConfig c, Properties p, String pre) {
+        p.setProperty(pre + "noiseTargetPct", fmt(c.noiseTargetPct));
+        p.setProperty(pre + "noiseBandLowPct", fmt(c.noiseBandLowPct));
+        p.setProperty(pre + "noiseBandHighPct", fmt(c.noiseBandHighPct));
+        p.setProperty(pre + "marginPct", fmt(c.marginPct));
+        p.setProperty(pre + "balanceCylinders", Boolean.toString(c.balanceCylinders));
+        p.setProperty(pre + "cylinderImbalancePct", fmt(c.cylinderImbalancePct));
+        p.setProperty(pre + "minLoad", fmt(c.minLoad));
+        p.setProperty(pre + "wotTps", fmt(c.wotTps));
+        p.setProperty(pre + "minRpm", fmt(c.minRpm));
+        p.setProperty(pre + "maxRpm", fmt(c.maxRpm));
+        p.setProperty(pre + "windowFromEcu", Boolean.toString(c.windowFromEcu));
+        p.setProperty(pre + "minCltC", fmt(c.minCltC));
+        p.setProperty(pre + "minSamplesPerBin", Integer.toString(c.minSamplesPerBin));
+        p.setProperty(pre + "maxGainFactorPerRun", fmt(c.maxGainFactorPerRun));
+        p.setProperty(pre + "minThresholdPct", fmt(c.minThresholdPct));
+        p.setProperty(pre + "maxThresholdPct", fmt(c.maxThresholdPct));
+        p.setProperty(pre + "maxFalsePct", fmt(c.maxFalsePct));
+        p.setProperty(pre + "raiseOnFalsePct", fmt(c.raiseOnFalsePct));
+        p.setProperty(pre + "spikeFactor", fmt(c.spikeFactor));
+        p.setProperty(pre + "maxBoostKpa", fmt(c.maxBoostKpa));
+        p.setProperty(pre + "runsRequired", Integer.toString(c.runsRequired));
+        p.setProperty(pre + "autoEndRunIdleSec", fmt(c.autoEndRunIdleSec));
+    }
+
+    public static void knockFrom(KnockCalConfig c, Properties p, String pre) {
+        c.noiseTargetPct = d(p, pre + "noiseTargetPct", c.noiseTargetPct);
+        c.noiseBandLowPct = d(p, pre + "noiseBandLowPct", c.noiseBandLowPct);
+        c.noiseBandHighPct = d(p, pre + "noiseBandHighPct", c.noiseBandHighPct);
+        c.marginPct = d(p, pre + "marginPct", c.marginPct);
+        c.balanceCylinders = bool(p, pre + "balanceCylinders", c.balanceCylinders);
+        c.cylinderImbalancePct = d(p, pre + "cylinderImbalancePct", c.cylinderImbalancePct);
+        c.minLoad = d(p, pre + "minLoad", c.minLoad);
+        c.wotTps = d(p, pre + "wotTps", c.wotTps);
+        c.minRpm = d(p, pre + "minRpm", c.minRpm);
+        c.maxRpm = d(p, pre + "maxRpm", c.maxRpm);
+        c.windowFromEcu = bool(p, pre + "windowFromEcu", c.windowFromEcu);
+        c.minCltC = d(p, pre + "minCltC", c.minCltC);
+        c.minSamplesPerBin = (int) d(p, pre + "minSamplesPerBin", c.minSamplesPerBin);
+        c.maxGainFactorPerRun = d(p, pre + "maxGainFactorPerRun", c.maxGainFactorPerRun);
+        c.minThresholdPct = d(p, pre + "minThresholdPct", c.minThresholdPct);
+        c.maxThresholdPct = d(p, pre + "maxThresholdPct", c.maxThresholdPct);
+        c.maxFalsePct = d(p, pre + "maxFalsePct", c.maxFalsePct);
+        c.raiseOnFalsePct = d(p, pre + "raiseOnFalsePct", c.raiseOnFalsePct);
+        c.spikeFactor = d(p, pre + "spikeFactor", c.spikeFactor);
+        c.maxBoostKpa = d(p, pre + "maxBoostKpa", c.maxBoostKpa);
         c.runsRequired = (int) d(p, pre + "runsRequired", c.runsRequired);
         c.autoEndRunIdleSec = d(p, pre + "autoEndRunIdleSec", c.autoEndRunIdleSec);
     }

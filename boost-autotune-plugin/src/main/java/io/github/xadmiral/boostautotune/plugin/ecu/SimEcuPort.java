@@ -116,9 +116,34 @@ public final class SimEcuPort implements EcuPort {
         options.put("launch_opt_on", "Off");
         options.put("launchlimopt", "Spark Cut");
         options.put("OvrRunC", "On");
+        // knock: the base tune's threshold curve, the internal module listening per cylinder, gains
+        // roughly right for this engine (a fresh MS3 has 1.000 everywhere: far too loud)
+        arrays.put(b.knockRpmBins, column(2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 7000));
+        arrays.put(b.knockThresholdTable, column(33, 40, 42, 45, 45, 45, 45, 45, 50, 50));
+        for (int c = 1; c <= 8; c++) {
+            options.put(b.knockGainParam(c), "0.421");
+        }
+        options.put(b.knockPerCylParam, "On");
+        options.put("knock_conf_percylact", "Off");
+        options.put(b.cylindersParam, "6");
+        options.put(b.knockControlParam, "Safe Mode");
+        options.put("knk_option_an", "Internal");
+        options.put("knock_conf_num", "2");
+        scalars.put(b.knockMinLoadParam, 80.0);
+        scalars.put(b.knockLoRpmParam, 1500.0);
+        scalars.put(b.knockHiRpmParam, 7000.0);
+        scalars.put("knk_maxrtd", 6.0);
+        scalars.put("knk_ndet", 2.0);
         applyAuxiliaries();
         sim = new PullSimulator(plant, ecu);
     }
+
+    /** The MS3 knock gain options. */
+    static final String[] KNOCK_GAIN = {"2.000", "1.882", "1.778", "1.684", "1.600", "1.523", "1.455", "1.391", "1.333", "1.280", "1.231",
+            "1.185", "1.143", "1.063", "1.000", "0.944", "0.895", "0.85", "0.81", "0.773", "0.739", "0.708", "0.680", "0.654", "0.630", "0.607",
+            "0.586", "0.567", "0.548", "0.500", "0.471", "0.444", "0.421", "0.400", "0.381", "0.364", "0.348", "0.333", "0.320", "0.308", "0.296",
+            "0.286", "0.276", "0.267", "0.258", "0.250", "0.236", "0.222", "0.211", "0.200", "0.190", "0.182", "0.174", "0.167", "0.160", "0.154",
+            "0.148", "0.143", "0.138", "0.133", "0.129", "0.125", "0.118", "0.111"};
 
     private void applyAuxiliaries() {
         EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
@@ -134,6 +159,18 @@ public final class SimEcuPort implements EcuPort {
         ecu.alsMinRpm = scalars.get("als_minrpm");
         ecu.alsMaxRpm = scalars.get("als_maxrpm");
         ecu.alsMaxTimeSec = scalars.get("als_maxtime");
+        ecu.knockNoiseEnabled = true;
+        ecu.knockRpmBins = flat(arrays.get(b.knockRpmBins));
+        ecu.knockThresholds = flat(arrays.get(b.knockThresholdTable));
+        boolean perCyl = b.knockPerCylOnOption.equals(options.get(b.knockPerCylParam));
+        double[] gains = new double[6];
+        for (int c = 0; c < gains.length; c++) {
+            gains[c] = Double.parseDouble(options.get(b.knockGainParam(perCyl ? c + 1 : 1)));
+        }
+        ecu.knockGains = gains;
+        ecu.knockMinLoad = scalars.get(b.knockMinLoadParam);
+        ecu.knockLoRpm = scalars.get(b.knockLoRpmParam);
+        ecu.knockHiRpm = scalars.get(b.knockHiRpmParam);
     }
 
     /** Cool-down between anti-lag runs (the demo has no wind). */
@@ -206,7 +243,8 @@ public final class SimEcuPort implements EcuPort {
     @Override
     public List<String> channelNames(String config) {
         return Arrays.asList("rpm", "tps", "map", "boost_targ_1", "boostduty", "coolant", "gear", "status2", "seconds",
-                "vvt_ang1", "vvt_target1", "fuelload", "ignload", "advance", "knock", "knockRetard", "afr1", "status10", "mat");
+                "vvt_ang1", "vvt_target1", "fuelload", "ignload", "advance", "knock", "knockRetard", "afr1", "status10", "mat",
+                "knock_cyl01", "knock_cyl02", "knock_cyl03", "knock_cyl04", "knock_cyl05", "knock_cyl06");
     }
 
     @Override
@@ -215,7 +253,7 @@ public final class SimEcuPort implements EcuPort {
             double[][] a = arrays.get(name);
             double min = name.startsWith("advance") || name.equals("als_timing") ? -50 : 0;
             double max = name.contains("targets") ? 400 : name.startsWith("advance") ? 90 : name.startsWith("vvt_timing1") ? 720
-                    : name.equals("als_timing") ? 50 : name.equals("als_rpms") ? 25000 : 100;
+                    : name.equals("als_timing") ? 50 : name.endsWith("_rpms") ? 25000 : 100;
             return new ParamInfo("array", "", min, max, 1, a[0].length, a.length, Collections.<String>emptyList());
         }
         if (scalars.containsKey(name)) {
@@ -229,6 +267,11 @@ public final class SimEcuPort implements EcuPort {
             List<String> opts = name.equals("als_in_pin") ? Arrays.asList("Off", "Always ON")
                     : name.equals("launch_opt_on") ? Arrays.asList("Off", "Launch", "Launch/Flatshift")
                     : name.equals("IdleCtl") ? Arrays.asList("None", "PWM valve (2 or 3 wire)", "Stepper valve (6 wire)")
+                    : name.startsWith("knock_gain") ? Arrays.asList(KNOCK_GAIN)
+                    : name.equals("nCylinders") ? Arrays.asList("INVALID", "1", "2", "3", "4", "5", "6", "7", "8")
+                    : name.equals("knk_option") ? Arrays.asList("Disabled", "Safe Mode", "Aggressive Mode")
+                    : name.equals("knk_option_an") ? Arrays.asList("Analogue", "Internal")
+                    : name.equals("knock_conf_num") ? Arrays.asList("1", "2")
                     : Arrays.asList("Off", "On", "Open-loop", "Closed-loop");
             return new ParamInfo("bits", "", 0, 0, 0, 1, 1, opts);
         }
@@ -292,6 +335,7 @@ public final class SimEcuPort implements EcuPort {
         }
         options.put(name, option);
         ecu.apply(toState());
+        applyAuxiliaries();
     }
 
     @Override
@@ -415,6 +459,11 @@ public final class SimEcuPort implements EcuPort {
                         emit("afr1", s.afr);
                         emit("status10", s.alsActive ? 128 : 0);
                         emit("mat", s.mat);
+                        if (s.knockCyl != null) {
+                            for (int c = 0; c < s.knockCyl.length && c < 6; c++) {
+                                emit(String.format(java.util.Locale.US, "knock_cyl%02d", c + 1), s.knockCyl[c]);
+                            }
+                        }
                         emit("map", s.map); // trigger channel last
                     }
                     sim.setTime(sim.time() + 3);

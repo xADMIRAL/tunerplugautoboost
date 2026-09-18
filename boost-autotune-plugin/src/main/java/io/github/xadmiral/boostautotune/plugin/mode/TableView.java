@@ -10,12 +10,19 @@ public final class TableView {
     public final Grid next;
     public final Grid reference;
     public final BiasBuildResult quality;
+    /** Cell number format. */
+    public final String format;
 
     public TableView(String title, String yLabel, Grid next, Grid reference, BiasBuildResult quality) {
+        this(title, yLabel, next, reference, quality, "%.1f");
+    }
+
+    public TableView(String title, String yLabel, Grid next, Grid reference, BiasBuildResult quality, String format) {
         this.title = title;
         this.yLabel = yLabel;
         this.next = next;
         this.reference = reference;
         this.quality = quality;
+        this.format = format;
     }
 }

@@ -41,9 +41,10 @@ class MainPanelHeadlessTest {
         p.config().targetStagesKpa.add(175.0);
         p.ignitionSweepConfig().maxAdvanceOverOriginalDeg = 3;
         p.alsConfig().targetKpa = 135;
+        p.knockConfig().noiseTargetPct = 45;
         assertTrue(p.antilagPanel().presetRowCount() > 20);
         SettingsStore store = new SettingsStore(f);
-        store.save(p.config(), p.vvtSweepConfig(), p.ignitionSweepConfig(), p.vvtPidConfig(), p.alsConfig(), p.binding(), new Properties());
+        store.save(p.config(), p.vvtSweepConfig(), p.ignitionSweepConfig(), p.vvtPidConfig(), p.alsConfig(), p.knockConfig(), p.binding(), new Properties());
         assertTrue(f.exists());
         Properties raw = store.loadRaw();
         assertEquals("150, 175", raw.getProperty("tune.targetStagesKpa"));
@@ -57,6 +58,13 @@ class MainPanelHeadlessTest {
         assertEquals("true", raw.getProperty("tune.fastSpool"));
         assertEquals("boost_ctl_lowerlimit", raw.getProperty("ecu.closedLoopWindowParam"));
         assertEquals("als_timing", raw.getProperty("ecu.alsTimingTable"));
+        assertEquals("45", raw.getProperty("knock.noiseTargetPct"));
+        assertEquals("knock_thresholds", raw.getProperty("ecu.knockThresholdTable"));
+        assertEquals("knock_gain", raw.getProperty("ecu.knockGainPrefix"));
+        io.github.xadmiral.boostautotune.core.knock.KnockCalConfig kc = new io.github.xadmiral.boostautotune.core.knock.KnockCalConfig();
+        SettingsStore.knockFrom(kc, raw, "knock.");
+        assertEquals(45, kc.noiseTargetPct, 1e-9);
+        assertEquals(30, kc.marginPct, 1e-9);
         io.github.xadmiral.boostautotune.core.als.AlsConfig als = new io.github.xadmiral.boostautotune.core.als.AlsConfig();
         SettingsStore.alsFrom(als, raw, "als.");
         assertEquals(135, als.targetKpa, 1e-9);

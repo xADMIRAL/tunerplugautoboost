@@ -114,7 +114,32 @@ public final class EcuBinding {
     /** "Operate ALS below this TPS": kept above the DBW throttle opening so the ALS does not switch itself off. */
     public String alsMaxTpsParam = "";
 
+    // ---- knock sensor calibration ----
+    /** Per-cylinder knock level channels: prefix plus a two-digit cylinder number (knock_cyl01...). */
+    public String knockCylChannelPrefix = "";
+    public String cylindersParam = "";
+    public String knockThresholdTable = "";
+    public String knockRpmBins = "";
+    /** Knock gain parameters: prefix plus a two-digit cylinder number (knock_gain01...), or a single parameter of that name. */
+    public String knockGainPrefix = "";
+    public String knockPerCylParam = "";
+    public String knockPerCylOnOption = "";
+    public String knockControlParam = "";
+    public String knockControlOffOption = "";
+    /** The ECU's own knock window (load, RPM), read to survey the same region. */
+    public String knockMinLoadParam = "";
+    public String knockLoRpmParam = "";
+    public String knockHiRpmParam = "";
+
     public TableOrientation orientation = TableOrientation.AUTO;
+
+    public String knockCylChannel(int cylinder) {
+        return knockCylChannelPrefix + String.format(java.util.Locale.US, "%02d", cylinder);
+    }
+
+    public String knockGainParam(int cylinder) {
+        return knockGainPrefix + String.format(java.util.Locale.US, "%02d", cylinder);
+    }
 
     public boolean has(String name) {
         return name != null && !name.trim().isEmpty();
@@ -195,6 +220,31 @@ public final class EcuBinding {
         if (!has(alsAirStepsParam) && !has(alsAirDutyParam) && !has(alsAirDbwParam)) {
             problems.add("At least one ALS air parameter (idle valve steps / duty, or DBW throttle opening) is required");
         }
+        return problems;
+    }
+
+    /** Problems for the knock sensor calibration. */
+    public List<String> validateKnock(List<String> channels, List<String> params) {
+        List<String> problems = new ArrayList<String>();
+        checkChannel(problems, channels, "RPM channel", rpmChannel, true);
+        checkChannel(problems, channels, "TPS channel", tpsChannel, true);
+        checkChannel(problems, channels, "MAP channel", mapChannel, true);
+        checkChannel(problems, channels, "CLT channel", cltChannel, false);
+        checkChannel(problems, channels, "Knock level channel", knockChannel, true);
+        checkChannel(problems, channels, "Knock retard channel", knockRetardChannel, false);
+        checkChannel(problems, channels, "Ignition load channel", ignLoadChannel, false);
+        checkChannel(problems, channels, "Knock per-cylinder channels (first)", has(knockCylChannelPrefix) ? knockCylChannel(1) : "", false);
+        checkParam(problems, params, "Knock threshold curve", knockThresholdTable, true);
+        checkParam(problems, params, "Knock threshold RPM bins", knockRpmBins, true);
+        if (has(knockGainPrefix) && params != null && !params.contains(knockGainParam(1)) && !params.contains(knockGainPrefix)) {
+            problems.add("Knock gain parameters: neither '" + knockGainParam(1) + "' nor '" + knockGainPrefix + "' exists in this ECU definition");
+        }
+        checkParam(problems, params, "Cylinder count parameter", cylindersParam, false);
+        checkParam(problems, params, "Knock per-cylinder parameter", knockPerCylParam, false);
+        checkParam(problems, params, "Knock control parameter", knockControlParam, false);
+        checkParam(problems, params, "Knock minimum load parameter", knockMinLoadParam, false);
+        checkParam(problems, params, "Knock RPM window low parameter", knockLoRpmParam, false);
+        checkParam(problems, params, "Knock RPM window high parameter", knockHiRpmParam, false);
         return problems;
     }
 
@@ -359,6 +409,18 @@ public final class EcuBinding {
         p.setProperty(prefix + "dbwEnableParam", dbwEnableParam);
         p.setProperty(prefix + "dbwEnableOption", dbwEnableOption);
         p.setProperty(prefix + "alsMaxTpsParam", alsMaxTpsParam);
+        p.setProperty(prefix + "knockCylChannelPrefix", knockCylChannelPrefix);
+        p.setProperty(prefix + "cylindersParam", cylindersParam);
+        p.setProperty(prefix + "knockThresholdTable", knockThresholdTable);
+        p.setProperty(prefix + "knockRpmBins", knockRpmBins);
+        p.setProperty(prefix + "knockGainPrefix", knockGainPrefix);
+        p.setProperty(prefix + "knockPerCylParam", knockPerCylParam);
+        p.setProperty(prefix + "knockPerCylOnOption", knockPerCylOnOption);
+        p.setProperty(prefix + "knockControlParam", knockControlParam);
+        p.setProperty(prefix + "knockControlOffOption", knockControlOffOption);
+        p.setProperty(prefix + "knockMinLoadParam", knockMinLoadParam);
+        p.setProperty(prefix + "knockLoRpmParam", knockLoRpmParam);
+        p.setProperty(prefix + "knockHiRpmParam", knockHiRpmParam);
         p.setProperty(prefix + "orientation", orientation.name());
     }
 
@@ -438,6 +500,18 @@ public final class EcuBinding {
         dbwEnableParam = p.getProperty(prefix + "dbwEnableParam", dbwEnableParam);
         dbwEnableOption = p.getProperty(prefix + "dbwEnableOption", dbwEnableOption);
         alsMaxTpsParam = p.getProperty(prefix + "alsMaxTpsParam", alsMaxTpsParam);
+        knockCylChannelPrefix = p.getProperty(prefix + "knockCylChannelPrefix", knockCylChannelPrefix);
+        cylindersParam = p.getProperty(prefix + "cylindersParam", cylindersParam);
+        knockThresholdTable = p.getProperty(prefix + "knockThresholdTable", knockThresholdTable);
+        knockRpmBins = p.getProperty(prefix + "knockRpmBins", knockRpmBins);
+        knockGainPrefix = p.getProperty(prefix + "knockGainPrefix", knockGainPrefix);
+        knockPerCylParam = p.getProperty(prefix + "knockPerCylParam", knockPerCylParam);
+        knockPerCylOnOption = p.getProperty(prefix + "knockPerCylOnOption", knockPerCylOnOption);
+        knockControlParam = p.getProperty(prefix + "knockControlParam", knockControlParam);
+        knockControlOffOption = p.getProperty(prefix + "knockControlOffOption", knockControlOffOption);
+        knockMinLoadParam = p.getProperty(prefix + "knockMinLoadParam", knockMinLoadParam);
+        knockLoRpmParam = p.getProperty(prefix + "knockLoRpmParam", knockLoRpmParam);
+        knockHiRpmParam = p.getProperty(prefix + "knockHiRpmParam", knockHiRpmParam);
         try {
             orientation = TableOrientation.valueOf(p.getProperty(prefix + "orientation", orientation.name()));
         } catch (IllegalArgumentException e) {

@@ -2,6 +2,8 @@ package io.github.xadmiral.boostautotune.plugin;
 
 import io.github.xadmiral.boostautotune.core.als.AlsConfig;
 import io.github.xadmiral.boostautotune.core.als.AlsSession;
+import io.github.xadmiral.boostautotune.core.knock.KnockCalConfig;
+import io.github.xadmiral.boostautotune.core.knock.KnockCalSession;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuAdapter;
 import io.github.xadmiral.boostautotune.plugin.mode.AntilagPresets;
 import io.github.xadmiral.boostautotune.core.learn.SampleState;
@@ -248,6 +250,70 @@ class ModesDemoIntegrationTest {
         assertEquals(60, port.readScalar(SimEcuPort.CONFIG, b.alsAirStepsParam), 1e-9);
         assertEquals(3, port.readScalar(SimEcuPort.CONFIG, b.alsMaxTimeParam), 1e-9);
         assertEquals("Always ON", port.readOption(SimEcuPort.CONFIG, b.alsEnableParam));
+    }
+
+    @Test
+    void knockCalibrationSetsTheGainsAndTheThresholdCurve() throws Exception {
+        SimEcuPort port = new SimEcuPort();
+        Collector listener = new Collector();
+        TuneController ctl = new TuneController(listener);
+        ctl.setPort(port);
+        EcuBinding b = demoBinding();
+        EcuAdapter setup = new EcuAdapter(port, b);
+        for (int c = 1; c <= 6; c++) {
+            setup.writeAny(b.knockGainParam(c), "1.000"); // a fresh ECU: the input pegs at full scale
+        }
+        // a timing map that does not knock: the demo engine's base table knocks above 5000 rpm
+        double[][] spark = port.readArray2D(SimEcuPort.CONFIG, b.sparkTable);
+        for (double[] row : spark) {
+            for (int i = 0; i < row.length; i++) {
+                row[i] -= 4;
+            }
+        }
+        port.writeArray2D(SimEcuPort.CONFIG, b.sparkTable, spark);
+        KnockCalConfig cfg = new KnockCalConfig();
+        cfg.autoEndRunIdleSec = 0;
+        ctl.startKnockCalSession(cfg, b);
+        assertEquals(TuneMode.KNOCK_CAL, ctl.mode());
+        assertTrue(String.join("\n", listener.log).contains("6 gain(s)"), String.join("\n", listener.log));
+        int runs = 0;
+        while (ctl.state() != SessionState.DONE && runs < 12) {
+            ctl.writePlanToEcu();
+            ctl.startRun();
+            port.simulatePull(3, 1000);
+            waitForStream(port);
+            port.simulatePull(3, 1000);
+            waitForStream(port);
+            assertNotEquals(SessionState.ABORTED, ctl.state(), ctl.abortReason());
+            KnockCalSession.Report r = (KnockCalSession.Report) ctl.endRun();
+            assertSame(r, listener.last);
+            assertTrue(r.samples > 100, "samples at load in run " + runs + ": " + r.samples);
+            ctl.applyAndPrepareNext();
+            runs++;
+        }
+        assertEquals(SessionState.DONE, ctl.state(), String.join("\n", listener.log));
+        assertTrue(runs >= 3 && runs <= 9, "runs " + runs);
+        // the gains came down from 1.000 and the quiet cylinder 5 got more than the loud cylinder 6
+        double[] gains = setup.readKnockGains(setup.knockGainParams(6, true));
+        for (double g : gains) {
+            assertTrue(g < 0.8, "gain " + g);
+        }
+        assertTrue(gains[4] > gains[5], java.util.Arrays.toString(gains));
+        KnockCalSession.Report last = (KnockCalSession.Report) listener.last;
+        assertTrue(last.reference >= cfg.noiseBandLowPct && last.reference <= cfg.noiseBandHighPct, "reference " + last.reference);
+        assertEquals(0, last.retardEvents, "no false knock retard in the final run");
+        double[] thr = port.readArray1D(SimEcuPort.CONFIG, b.knockThresholdTable);
+        assertTrue(thr[8] > thr[0] + 5, java.util.Arrays.toString(thr)); // the curve rises with the noise
+        for (int i = 0; i < last.bins.length; i++) {
+            if (last.bins[i].measured(cfg.minSamplesPerBin)) {
+                assertTrue(thr[i] >= last.bins[i].p95 * 1.05, String.format("bin %.0f: threshold %.1f vs p95 %.1f", last.bins[i].rpm, thr[i], last.bins[i].p95));
+            }
+        }
+        assertEquals(2, ctl.tables().size());
+        assertTrue(ctl.analysisText().contains("Per cylinder p95"));
+        ctl.restoreOriginal();
+        assertEquals("1.000", port.readOption(SimEcuPort.CONFIG, "knock_gain05"));
+        assertEquals(33, port.readArray1D(SimEcuPort.CONFIG, b.knockThresholdTable)[0], 1e-9);
     }
 
     @Test

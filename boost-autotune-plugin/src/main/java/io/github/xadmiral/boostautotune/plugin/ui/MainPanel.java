@@ -2,6 +2,7 @@ package io.github.xadmiral.boostautotune.plugin.ui;
 
 import io.github.xadmiral.boostautotune.core.als.AlsConfig;
 import io.github.xadmiral.boostautotune.core.config.AutotuneConfig;
+import io.github.xadmiral.boostautotune.core.knock.KnockCalConfig;
 import io.github.xadmiral.boostautotune.core.learn.SampleState;
 import io.github.xadmiral.boostautotune.core.model.Sample;
 import io.github.xadmiral.boostautotune.core.sweep.SweepConfig;
@@ -30,6 +31,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
     private final SweepConfig ignSweep = SweepConfig.ignitionDefaults();
     private final VvtPidConfig vvtPid = new VvtPidConfig();
     private final AlsConfig als = new AlsConfig();
+    private final KnockCalConfig knock = new KnockCalConfig();
     private final EcuBinding binding;
     private final SettingsStore store;
     private final TuneController ctl;
@@ -38,6 +40,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
     private final VvtPanel vvtPanel;
     private final IgnitionPanel ignitionPanel;
     private final AntilagPanel antilagPanel;
+    private final KnockPanel knockPanel;
     private final AutotunePanel autotune;
     private final AnalysisPanel analysis;
     private final LogPanel logPanel = new LogPanel();
@@ -52,7 +55,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
         if (store != null && store.exists()) {
             try {
-                store.load(cfg, vvtSweep, ignSweep, vvtPid, als, b, uiPrefs);
+                store.load(cfg, vvtSweep, ignSweep, vvtPid, als, knock, b, uiPrefs);
             } catch (IOException e) {
                 b = EcuPresets.create(EcuPresets.STEALTH_PCM);
             }
@@ -83,6 +86,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
                 logPanel.append(s);
             }
         });
+        knockPanel = new KnockPanel(knock, save);
         autotune = new AutotunePanel(ctl, new Runnable() {
             public void run() {
                 startSession();
@@ -94,6 +98,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         tabs.addTab("VVT", vvtPanel);
         tabs.addTab("Ignition", ignitionPanel);
         tabs.addTab("Anti-lag", antilagPanel);
+        tabs.addTab("Knock", knockPanel);
         tabs.addTab("Setup", setup);
         tabs.addTab("Analysis", analysis);
         tabs.addTab("Log", logPanel);
@@ -144,6 +149,14 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         return antilagPanel;
     }
 
+    public KnockCalConfig knockConfig() {
+        return knock;
+    }
+
+    public KnockPanel knockPanel() {
+        return knockPanel;
+    }
+
     public TargetsPanel targetsPanel() {
         return targets;
     }
@@ -184,7 +197,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         }
         try {
             uiPrefs.setProperty("fontScale", Fonts.choiceFor(fontScale));
-            store.save(cfg, vvtSweep, ignSweep, vvtPid, als, binding, uiPrefs);
+            store.save(cfg, vvtSweep, ignSweep, vvtPid, als, knock, binding, uiPrefs);
         } catch (IOException e) {
             logPanel.append("Could not save settings: " + e.getMessage());
         }
@@ -207,6 +220,10 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
             case ANTILAG:
                 settingsTab = antilagPanel;
                 ok = antilagPanel.apply();
+                break;
+            case KNOCK_CAL:
+                settingsTab = knockPanel;
+                ok = knockPanel.apply();
                 break;
             default:
                 settingsTab = targets;
@@ -254,6 +271,19 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
                         + "The anti-lag must be switched on in the ECU (write a drift preset first).\n"
                         + "Anti-lag makes the turbo and the manifold glow: short runs, cool-down laps, and lift the ALS switch if anything smells.";
                 break;
+            case KNOCK_CAL:
+                if (!knockPanel.acknowledged()) {
+                    tabs.setSelectedComponent(knockPanel);
+                    JOptionPane.showMessageDialog(this, "Tick the acknowledgement on the Knock tab first.", "Boost Autotune",
+                            JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                text = "START A KNOCK SENSOR CALIBRATION?\n\n"
+                        + "Noise target " + knock.noiseTargetPct + " % (" + knock.noiseBandLowPct + ".." + knock.noiseBandHighPct + "), threshold margin "
+                        + knock.marginPct + " % above the noise, gains moved by at most x" + knock.maxGainFactorPerRun + " per run.\n"
+                        + "The plugin writes the knock threshold curve and the knock gains between runs; a copy is kept for 'Restore original'.\n"
+                        + "Use a timing map that does not knock: everything the sensor hears in these pulls is taken as noise.";
+                break;
             default:
                 text = "Start a boost autotune session?\n\n"
                         + "Targets: " + cfg.targetStagesKpa + " kPa, hard limit " + cfg.maxBoostKpa + " kPa.\n"
@@ -278,6 +308,9 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
                     break;
                 case ANTILAG:
                     ctl.startAntilagSession(als, binding);
+                    break;
+                case KNOCK_CAL:
+                    ctl.startKnockCalSession(knock, binding);
                     break;
                 default:
                     ctl.startSession(cfg, binding);

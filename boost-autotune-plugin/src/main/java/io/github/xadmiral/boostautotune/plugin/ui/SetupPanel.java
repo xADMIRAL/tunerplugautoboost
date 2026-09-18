@@ -120,6 +120,18 @@ public final class SetupPanel extends JPanel {
             new Row("dbwEnableParam", "Drive-by-wire enable parameter", "param"),
             new Row("dbwEnableOption", "  ... option meaning ON", "text"),
             new Row("alsMaxTpsParam", "Anti-lag operate-below TPS parameter (optional)", "param"),
+            new Row("knockThresholdTable", "Knock threshold curve (Y values)", "param"),
+            new Row("knockRpmBins", "Knock threshold RPM bins (X)", "param"),
+            new Row("knockGainPrefix", "Knock gain parameter prefix (knock_gain -> knock_gain01...)", "text"),
+            new Row("knockCylChannelPrefix", "Knock per-cylinder channel prefix (knock_cyl -> knock_cyl01...)", "text"),
+            new Row("cylindersParam", "Cylinder count parameter", "param"),
+            new Row("knockPerCylParam", "Knock per-cylinder parameter", "param"),
+            new Row("knockPerCylOnOption", "  ... option meaning ON", "text"),
+            new Row("knockControlParam", "Knock control parameter (read only)", "param"),
+            new Row("knockControlOffOption", "  ... option meaning DISABLED", "text"),
+            new Row("knockMinLoadParam", "Knock minimum load parameter (optional)", "param"),
+            new Row("knockLoRpmParam", "Knock RPM window low parameter (optional)", "param"),
+            new Row("knockHiRpmParam", "Knock RPM window high parameter (optional)", "param"),
             new Row("orientation", "Table orientation", "orient"),
     };
 
@@ -372,6 +384,9 @@ public final class SetupPanel extends JPanel {
                 break;
             case ANTILAG:
                 problems = binding.validateAntilag(ch, pa);
+                break;
+            case KNOCK_CAL:
+                problems = binding.validateKnock(ch, pa);
                 break;
             default:
                 problems = binding.validate(ch, pa);

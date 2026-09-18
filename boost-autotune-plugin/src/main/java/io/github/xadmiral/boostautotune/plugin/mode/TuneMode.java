@@ -1,12 +1,13 @@
 package io.github.xadmiral.boostautotune.plugin.mode;
 
-/** The four things the plugin can tune. */
+/** The things the plugin can tune. */
 public enum TuneMode {
     BOOST("Boost: closed-loop autotune (pulls)"),
     VVT_PID("VVT: closed-loop PID (normal driving)"),
     VVT_SWEEP("VVT: cam target sweep (pulls)"),
     IGNITION_SWEEP("Ignition: advance sweep with knock guard (pulls)"),
-    ANTILAG("Anti-lag: off-throttle boost autotune (lifts)");
+    ANTILAG("Anti-lag: off-throttle boost autotune (lifts)"),
+    KNOCK_CAL("Knock: sensor calibration, thresholds and gains (pulls)");
 
     private final String label;
 

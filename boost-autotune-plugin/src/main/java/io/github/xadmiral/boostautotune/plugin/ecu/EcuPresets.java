@@ -97,6 +97,18 @@ public final class EcuPresets {
             b.dbwEnableParam = "drivebywire_opt_on";
             b.dbwEnableOption = "On";
             b.alsMaxTpsParam = "als_maxtps";
+            b.knockCylChannelPrefix = "knock_cyl";
+            b.cylindersParam = "nCylinders";
+            b.knockThresholdTable = "knock_thresholds";
+            b.knockRpmBins = "knock_rpms";
+            b.knockGainPrefix = "knock_gain";
+            b.knockPerCylParam = "knock_conf_percyl";
+            b.knockPerCylOnOption = "On";
+            b.knockControlParam = "knk_option";
+            b.knockControlOffOption = "Disabled";
+            b.knockMinLoadParam = "knk_minload";
+            b.knockLoRpmParam = "knk_lorpm";
+            b.knockHiRpmParam = "knk_hirpm";
         } else if (SPEEDUINO.equals(name)) {
             b.rpmChannel = "rpm";
             b.tpsChannel = "tps";

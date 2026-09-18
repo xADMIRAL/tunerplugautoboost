@@ -349,6 +349,183 @@ public final class EcuAdapter {
         }
     }
 
+    // ---- knock sensor calibration ---------------------------------------------------------------
+
+    public double[] readKnockRpmBins() throws EcuException {
+        return port.readArray1D(config(), b.knockRpmBins);
+    }
+
+    public double[] readKnockThresholds() throws EcuException {
+        return port.readArray1D(config(), b.knockThresholdTable);
+    }
+
+    public void writeKnockThresholds(double[] v) throws EcuException {
+        port.writeArray1D(config(), b.knockThresholdTable, v);
+    }
+
+    public EcuPort.ParamInfo knockThresholdInfo() throws EcuException {
+        return port.parameterInfo(config(), b.knockThresholdTable);
+    }
+
+    /** Number of cylinders from the ECU, or 0 when it is not bound or not a number. */
+    public int cylinders() {
+        if (!b.has(b.cylindersParam)) {
+            return 0;
+        }
+        try {
+            EcuPort.ParamInfo info = port.parameterInfo(config(), b.cylindersParam);
+            String v = "bits".equalsIgnoreCase(info.paramClass) ? port.readOption(config(), b.cylindersParam)
+                    : Long.toString(Math.round(port.readScalar(config(), b.cylindersParam)));
+            return v == null ? 0 : Integer.parseInt(v.trim());
+        } catch (EcuException e) {
+            return 0;
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /** True when the ECU links the knock signal to cylinders (per-cylinder gains apply). */
+    public boolean knockPerCylinder() {
+        if (!b.has(b.knockPerCylParam) || !b.has(b.knockPerCylOnOption)) {
+            return false;
+        }
+        try {
+            String v = port.readOption(config(), b.knockPerCylParam);
+            return v != null && v.trim().equalsIgnoreCase(b.knockPerCylOnOption.trim());
+        } catch (EcuException e) {
+            return false;
+        }
+    }
+
+    /**
+     * The gain parameters to tune, cylinder 1 first: one per cylinder when the ECU works per
+     * cylinder, otherwise the first (or the single unnumbered) gain parameter. Empty when none is bound.
+     */
+    public List<String> knockGainParams(int cylinders, boolean perCylinder) {
+        List<String> out = new ArrayList<String>();
+        if (!b.has(b.knockGainPrefix)) {
+            return out;
+        }
+        List<String> names = port.parameterNames(config());
+        int n = perCylinder ? Math.max(1, cylinders) : 1;
+        for (int c = 1; c <= n; c++) {
+            String name = b.knockGainParam(c);
+            if (!names.contains(name)) {
+                break;
+            }
+            out.add(name);
+        }
+        if (out.isEmpty() && names.contains(b.knockGainPrefix)) {
+            out.add(b.knockGainPrefix);
+        }
+        return out;
+    }
+
+    /** The gain values the ECU offers (from the first gain parameter's option list), empty for a free scalar. */
+    public double[] knockGainOptions(List<String> gainParams) throws EcuException {
+        if (gainParams.isEmpty()) {
+            return new double[0];
+        }
+        EcuPort.ParamInfo info = port.parameterInfo(config(), gainParams.get(0));
+        if (!"bits".equalsIgnoreCase(info.paramClass)) {
+            return new double[0];
+        }
+        List<Double> vals = new ArrayList<Double>();
+        for (String o : info.options) {
+            try {
+                vals.add(Double.parseDouble(o.trim()));
+            } catch (NumberFormatException e) {
+                // "INVALID" and friends
+            }
+        }
+        double[] out = new double[vals.size()];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = vals.get(i);
+        }
+        return out;
+    }
+
+    public double[] readKnockGains(List<String> gainParams) throws EcuException {
+        String cfg = config();
+        double[] out = new double[gainParams.size()];
+        for (int i = 0; i < out.length; i++) {
+            EcuPort.ParamInfo info = port.parameterInfo(cfg, gainParams.get(i));
+            if ("bits".equalsIgnoreCase(info.paramClass)) {
+                String v = port.readOption(cfg, gainParams.get(i));
+                try {
+                    out[i] = Double.parseDouble(v == null ? "" : v.trim());
+                } catch (NumberFormatException e) {
+                    throw new EcuException(gainParams.get(i) + " = '" + v + "' is not a numeric gain");
+                }
+            } else {
+                out[i] = port.readScalar(cfg, gainParams.get(i));
+            }
+        }
+        return out;
+    }
+
+    /** Writes the gains, each as the closest option the ECU offers (or the number for a scalar). */
+    public void writeKnockGains(List<String> gainParams, double[] gains) throws EcuException {
+        String cfg = config();
+        for (int i = 0; i < gainParams.size() && i < gains.length; i++) {
+            EcuPort.ParamInfo info = port.parameterInfo(cfg, gainParams.get(i));
+            if ("bits".equalsIgnoreCase(info.paramClass)) {
+                String best = null;
+                double bestDist = Double.POSITIVE_INFINITY;
+                for (String o : info.options) {
+                    try {
+                        double d = Math.abs(Double.parseDouble(o.trim()) - gains[i]);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            best = o;
+                        }
+                    } catch (NumberFormatException e) {
+                        // skip
+                    }
+                }
+                if (best == null) {
+                    throw new EcuException(gainParams.get(i) + " has no numeric options");
+                }
+                port.writeOption(cfg, gainParams.get(i), best);
+            } else {
+                port.writeScalar(cfg, gainParams.get(i), gains[i]);
+            }
+        }
+    }
+
+    public String readKnockControl() throws EcuException {
+        return b.has(b.knockControlParam) ? port.readOption(config(), b.knockControlParam) : null;
+    }
+
+    public double readKnockMinLoad() throws EcuException {
+        return b.has(b.knockMinLoadParam) ? port.readScalar(config(), b.knockMinLoadParam) : Double.NaN;
+    }
+
+    public double readKnockLoRpm() throws EcuException {
+        return b.has(b.knockLoRpmParam) ? port.readScalar(config(), b.knockLoRpmParam) : Double.NaN;
+    }
+
+    public double readKnockHiRpm() throws EcuException {
+        return b.has(b.knockHiRpmParam) ? port.readScalar(config(), b.knockHiRpmParam) : Double.NaN;
+    }
+
+    /** Per-cylinder knock channels that exist in the ECU, cylinder 1 first. */
+    public List<String> knockCylChannels(int cylinders) {
+        List<String> out = new ArrayList<String>();
+        if (!b.has(b.knockCylChannelPrefix)) {
+            return out;
+        }
+        List<String> names = port.channelNames(config());
+        for (int c = 1; c <= Math.max(cylinders, 8); c++) {
+            String ch = b.knockCylChannel(c);
+            if (!names.contains(ch)) {
+                break;
+            }
+            out.add(ch);
+        }
+        return out;
+    }
+
     // ---- generic access for presets ------------------------------------------------------------
 
     /** Reads any parameter as text: options as their label, scalars as a number, arrays as rows. */

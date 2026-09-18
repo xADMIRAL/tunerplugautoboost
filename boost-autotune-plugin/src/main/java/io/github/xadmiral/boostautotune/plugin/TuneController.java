@@ -18,7 +18,9 @@ import io.github.xadmiral.boostautotune.plugin.ecu.EcuException;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuPort;
 import io.github.xadmiral.boostautotune.plugin.ecu.LiveFeed;
 import io.github.xadmiral.boostautotune.core.als.AlsConfig;
+import io.github.xadmiral.boostautotune.core.knock.KnockCalConfig;
 import io.github.xadmiral.boostautotune.plugin.mode.AntilagDriver;
+import io.github.xadmiral.boostautotune.plugin.mode.KnockCalDriver;
 import io.github.xadmiral.boostautotune.plugin.mode.BoostDriver;
 import io.github.xadmiral.boostautotune.plugin.mode.ModeDriver;
 import io.github.xadmiral.boostautotune.plugin.mode.SweepDriver;
@@ -216,6 +218,14 @@ public final class TuneController {
         }
     }
 
+    public void startKnockCalSession(KnockCalConfig cfg, EcuBinding binding) throws EcuException {
+        synchronized (lock) {
+            begin(binding);
+            KnockCalDriver d = new KnockCalDriver(adapter, cfg);
+            install(d, d.startupLog());
+        }
+    }
+
     private void begin(EcuBinding binding) throws EcuException {
         if (port == null) {
             throw new EcuException("No ECU connection");
@@ -392,7 +402,19 @@ public final class TuneController {
                 onSample(s);
             }
         });
-        port.subscribe(adapter.config(), feed.channels(), feed);
+        // optional channel families (per-cylinder knock) are listed in full: keep the ones this ECU has
+        List<String> wanted = feed.channels();
+        List<String> known = port.channelNames(adapter.config());
+        if (!known.isEmpty()) {
+            List<String> kept = new java.util.ArrayList<String>();
+            for (String ch : wanted) {
+                if (known.contains(ch)) {
+                    kept.add(ch);
+                }
+            }
+            wanted = kept;
+        }
+        port.subscribe(adapter.config(), wanted, feed);
         feedActive = true;
     }
 
