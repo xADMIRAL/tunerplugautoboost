@@ -192,4 +192,31 @@ class AlsSessionTest {
         assertTrue(r.messages.get(0).contains("No anti-lag event"));
         assertEquals(-15, r.nextPlan.timing.get(0, 0), 1e-9);
     }
+
+    @Test
+    void holdsTheRpmWithTheThrottleOnDriveByWire() {
+        SimEcu ecu = ecu();
+        ecu.alsAirIsThrottle = true; // the second knob is the DBW throttle opening in % TPS
+        PullSimulator sim = new PullSimulator(new BoostPlant(25), ecu);
+        Grid start = Grid.filled(RPM, TPS, -16);
+        ecu.alsTiming = start;
+        ecu.alsAir = 4;
+        AlsConfig cfg = new AlsConfig();
+        cfg.targetKpa = 130;
+        cfg.holdRpm = 2600;
+        cfg.airLabel = "throttle opening";
+        cfg.airStep = cfg.throttleStepPct;
+        cfg.airMin = cfg.throttleMinPct;
+        cfg.airMax = cfg.throttleMaxPct;
+        cfg.autoEndRunIdleSec = 0;
+        AlsSession session = new AlsSession(cfg);
+        session.initialize(start, 4);
+        int runs = run(session, ecu, sim, 15);
+        assertEquals(SessionState.DONE, session.state(), "aborted: " + session.abortReason());
+        assertTrue(runs <= 12, "runs " + runs);
+        assertTrue(session.plan().air > 12 && session.plan().air <= 20, "throttle opening " + session.plan().air);
+        assertTrue(session.lastReport().minRpm >= cfg.holdRpm - cfg.holdTolRpm, "RPM held down to " + session.lastReport().minRpm);
+        assertTrue(session.lastReport().plan.title().contains("throttle opening"), session.lastReport().plan.title());
+        assertTrue(session.lastReport().summary(cfg).contains("throttle opening"));
+    }
 }

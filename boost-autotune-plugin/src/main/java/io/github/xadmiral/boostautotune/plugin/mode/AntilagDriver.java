@@ -23,6 +23,9 @@ public final class AntilagDriver implements ModeDriver {
     private final double originalMaxTime;
     private final double originalMinRpm;
     private final String originalEnable;
+    private final boolean throttle;
+    private double originalMaxTps = Double.NaN;
+    private final List<String> driverNotes = new ArrayList<String>();
     private final List<String> startupLog = new ArrayList<String>();
     private double runPeak = Double.NaN;
 
@@ -35,12 +38,21 @@ public final class AntilagDriver implements ModeDriver {
             c.minTimingDeg = Math.max(c.minTimingDeg, tInfo.min);
             c.maxTimingDeg = Math.min(c.maxTimingDeg, tInfo.max);
         }
+        throttle = adapter.alsAirIsThrottle();
+        if (throttle) {
+            // drive-by-wire: the anti-lag opens the throttle, the idle valve parameters do nothing
+            c.airLabel = "throttle opening";
+            c.airStep = c.throttleStepPct;
+            c.airMin = c.throttleMinPct;
+            c.airMax = c.throttleMaxPct;
+        }
         double air = adapter.readAlsAir();
         EcuPort.ParamInfo aInfo = adapter.alsAirInfo();
         if (aInfo != null && aInfo.max > aInfo.min) {
             c.airMin = Math.max(c.airMin, aInfo.min);
             c.airMax = Math.min(c.airMax, aInfo.max);
         }
+        originalMaxTps = adapter.readAlsMaxTps();
         originalTiming = timing.copy();
         originalAir = air;
         originalMaxTime = adapter.readAlsMaxTime();
@@ -52,8 +64,12 @@ public final class AntilagDriver implements ModeDriver {
         }
         session = new AlsSession(c);
         session.initialize(timing, air);
-        startupLog.add(String.format(Locale.US, "Anti-lag target %.0f kPa off throttle (+/- %.0f), hold >= %.0f rpm for %.0f s; timing %.0f..%.0f deg, idle valve %s %.0f..%.0f",
-                c.targetKpa, c.tolKpa, c.holdRpm, c.holdSec, c.minTimingDeg, c.maxTimingDeg, adapter.alsAirParam(), c.airMin, c.airMax));
+        startupLog.add(String.format(Locale.US, "Anti-lag target %.0f kPa off throttle (+/- %.0f), hold >= %.0f rpm for %.0f s; timing %.0f..%.0f deg, %s %s %.1f..%.1f%s",
+                c.targetKpa, c.tolKpa, c.holdRpm, c.holdSec, c.minTimingDeg, c.maxTimingDeg, c.airLabel, adapter.alsAirParam(), c.airMin, c.airMax,
+                throttle ? " % TPS (drive-by-wire is on: the idle valve parameters do nothing on this ECU)" : ""));
+        if (throttle && !adapter.binding().has(adapter.binding().alsMaxTpsParam)) {
+            startupLog.add("WARNING: bind the ALS operate-below TPS parameter (als_maxtps) so it can be kept above the throttle opening");
+        }
         if (adapter.binding().has(adapter.binding().alsMaxTimeParam)) {
             startupLog.add(String.format(Locale.US, "%s will be set to %.0f s and %s to %.0f rpm with the first plan",
                     adapter.binding().alsMaxTimeParam, c.holdSec, adapter.binding().alsMinRpmParam, c.ecuMinRpm()));
@@ -98,7 +114,9 @@ public final class AntilagDriver implements ModeDriver {
 
     @Override
     public List<String> planNotes() {
-        return session.plan() == null ? Collections.<String>emptyList() : session.plan().notes;
+        List<String> out = new ArrayList<String>(session.plan() == null ? Collections.<String>emptyList() : session.plan().notes);
+        out.addAll(driverNotes);
+        return out;
     }
 
     @Override
@@ -109,6 +127,22 @@ public final class AntilagDriver implements ModeDriver {
     private void write(Grid timing, double air) throws EcuException {
         adapter.writeAlsTiming(timing);
         adapter.writeAlsAir(air);
+        keepAlsOperatingAbove(air);
+    }
+
+    /** With DBW the ALS must keep operating while it holds the throttle open: the "operate below TPS" limit follows. */
+    private void keepAlsOperatingAbove(double throttlePct) throws EcuException {
+        if (!throttle || Double.isNaN(originalMaxTps)) {
+            return;
+        }
+        double need = throttlePct + 3;
+        double now = adapter.readAlsMaxTps();
+        if (!Double.isNaN(now) && now < need) {
+            adapter.writeAlsMaxTps(need);
+            driverNotes.clear();
+            driverNotes.add(String.format(Locale.US, "%s raised %.1f -> %.1f %% so the ALS keeps operating with the throttle at %.1f %%",
+                    adapter.binding().alsMaxTpsParam, now, need, throttlePct));
+        }
     }
 
     private void writeHold(double sec, double minRpm) throws EcuException {
@@ -172,7 +206,9 @@ public final class AntilagDriver implements ModeDriver {
 
     @Override
     public void restoreOriginal() throws EcuException {
-        write(originalTiming, originalAir);
+        adapter.writeAlsTiming(originalTiming);
+        adapter.writeAlsAir(originalAir);
+        adapter.writeAlsMaxTps(originalMaxTps);
         writeHold(originalMaxTime, originalMinRpm);
         adapter.writeAlsEnable(originalEnable);
         if (session.state() != SessionState.DONE) {
@@ -183,7 +219,9 @@ public final class AntilagDriver implements ModeDriver {
     /** Original table and air, and the anti-lag switched off until the driver restores it. */
     @Override
     public void writeSafeState() throws EcuException {
-        write(originalTiming, originalAir);
+        adapter.writeAlsTiming(originalTiming);
+        adapter.writeAlsAir(originalAir);
+        adapter.writeAlsMaxTps(originalMaxTps);
         writeHold(originalMaxTime, originalMinRpm);
         if (adapter.binding().has(adapter.binding().alsDisableOption)) {
             adapter.writeAlsEnable(adapter.binding().alsDisableOption);

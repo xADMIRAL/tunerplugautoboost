@@ -106,6 +106,7 @@ public final class AntilagPanel extends JPanel {
     private final Form form = new Form();
     private final Form goals = new Form();
     private final JCheckBox advanced = new JCheckBox("Advanced settings", false);
+    private boolean lastPresetDbw;
     private JPanel advancedForm;
     private JButton applyBtn;
     private final JComboBox<String> presetCombo = new JComboBox<String>();
@@ -225,12 +226,20 @@ public final class AntilagPanel extends JPanel {
         form.addBool("Tune idle valve air for the RPM hold", "Off = the air stays as it is and only the timing is tuned",
                 new Form.BoolGet() { public boolean get() { return cfg.tuneAir; } },
                 new Form.BoolSet() { public void set(boolean v) { cfg.tuneAir = v; } });
-        form.addDouble("Air step per run (steps or % duty)", "", new Form.DoubleGet() { public double get() { return cfg.airStep; } },
+        form.addDouble("Idle valve step per run (steps or % duty)", "", new Form.DoubleGet() { public double get() { return cfg.airStep; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.airStep = v; } });
         form.addDouble("Air minimum", "", new Form.DoubleGet() { public double get() { return cfg.airMin; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.airMin = v; } });
         form.addDouble("Air maximum", "", new Form.DoubleGet() { public double get() { return cfg.airMax; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.airMax = v; } });
+        form.addDouble("DBW throttle step per run, % TPS", "Drive-by-wire: the anti-lag opens the throttle (als_iac_pos) instead of an idle valve",
+                new Form.DoubleGet() { public double get() { return cfg.throttleStepPct; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.throttleStepPct = v; } });
+        form.addDouble("DBW throttle minimum, % TPS", "", new Form.DoubleGet() { public double get() { return cfg.throttleMinPct; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.throttleMinPct = v; } });
+        form.addDouble("DBW throttle maximum, % TPS", "The INI allows up to 25.5 %; 20 % is plenty for a drift car",
+                new Form.DoubleGet() { public double get() { return cfg.throttleMaxPct; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.throttleMaxPct = v; } });
         form.section("Guards");
         form.addDouble("MAT warning, °C", "The run is not counted as good above this intake temperature",
                 new Form.DoubleGet() { public double get() { return cfg.maxMatC; } },
@@ -324,9 +333,18 @@ public final class AntilagPanel extends JPanel {
 
     public void loadPreset(String name) {
         model.rows.clear();
-        for (AntilagPresets.Setting s : AntilagPresets.create(name)) {
+        boolean dbw = false;
+        if (port != null) {
+            try {
+                dbw = adapter().alsAirIsThrottle();
+            } catch (EcuException e) {
+                dbw = false;
+            }
+        }
+        for (AntilagPresets.Setting s : AntilagPresets.create(name, dbw)) {
             model.rows.add(new Row(s));
         }
+        lastPresetDbw = dbw;
         model.fireTableDataChanged();
         AntilagPresets.Goals g = AntilagPresets.goals(name);
         if (g != null) {
@@ -336,8 +354,12 @@ public final class AntilagPanel extends JPanel {
                     name, g.targetKpa, g.holdRpm, g.holdSec));
             onChanged.run();
         }
-        presetStatus.setText("Mode '" + name + "' loaded, nothing written yet.");
+        presetStatus.setText("Mode '" + name + "' loaded" + (dbw ? " (drive-by-wire: throttle opening instead of idle valve steps)" : "") + ", nothing written yet.");
         readCurrent(false);
+    }
+
+    public boolean lastPresetForDriveByWire() {
+        return lastPresetDbw;
     }
 
     private EcuAdapter adapter() throws EcuException {

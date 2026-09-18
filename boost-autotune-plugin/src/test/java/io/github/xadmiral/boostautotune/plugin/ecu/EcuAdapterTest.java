@@ -172,4 +172,23 @@ class EcuAdapterTest {
         port.writeOption(SimEcuPort.CONFIG, b.idleTypeParam, "PWM valve (2 or 3 wire)");
         assertEquals("als_iac_duty", a.alsAirParam());
     }
+
+    @Test
+    void driveByWireSwitchesTheAntilagAirKnobToTheThrottle() throws Exception {
+        SimEcuPort port = new SimEcuPort();
+        EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
+        EcuAdapter a = new EcuAdapter(port, b);
+        assertFalse(a.alsAirIsThrottle());
+        assertEquals("als_iac_steps", a.alsAirParam());
+        port.writeOption(SimEcuPort.CONFIG, b.dbwEnableParam, "On");
+        assertTrue(a.alsAirIsThrottle());
+        assertEquals("als_iac_pos", a.alsAirParam());
+        assertEquals(10, a.readAlsAir(), 1e-9);
+        assertEquals(25.5, a.alsAirInfo().max, 1e-9);
+        a.writeAlsAir(12.5);
+        assertEquals(12.5, port.readScalar(SimEcuPort.CONFIG, "als_iac_pos"), 1e-9);
+        assertEquals(30, a.readAlsMaxTps(), 1e-9);
+        a.writeAlsMaxTps(15.5);
+        assertEquals(15.5, port.readScalar(SimEcuPort.CONFIG, b.alsMaxTpsParam), 1e-9);
+    }
 }

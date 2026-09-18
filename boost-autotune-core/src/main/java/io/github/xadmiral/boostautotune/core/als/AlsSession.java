@@ -26,6 +26,7 @@ public final class AlsSession {
         public final double holdSec;
         public final double ecuMinRpm;
         public final double holdRpm;
+        public final String airLabel;
         public final boolean finalResult;
         public final List<String> notes = new ArrayList<String>();
 
@@ -36,12 +37,13 @@ public final class AlsSession {
             this.holdSec = cfg.holdSec;
             this.ecuMinRpm = cfg.ecuMinRpm();
             this.holdRpm = cfg.holdRpm;
+            this.airLabel = cfg.airLabel;
             this.finalResult = finalResult;
         }
 
         public String title() {
             return finalResult ? "Anti-lag settled"
-                    : String.format(Locale.US, "Run %d: anti-lag, idle valve %.0f, hold >= %.0f rpm for %.0f s", runNumber, air, holdRpm, holdSec);
+                    : String.format(Locale.US, "Run %d: anti-lag, %s %s, hold >= %.0f rpm for %.0f s", runNumber, airLabel, num(air), holdRpm, holdSec);
         }
 
         public String driverInstructions() {
@@ -49,6 +51,10 @@ public final class AlsSession {
                     String.format(Locale.US, "With the anti-lag armed, in 3rd gear at 3500-5500 rpm: lift fully off the throttle for about %.0f s, then back on. "
                             + "Repeat 3-4 times with the ECU's pause time between lifts. Watch MAT; stop if anything sounds wrong.", holdSec + 1);
         }
+    }
+
+    static String num(double v) {
+        return v == Math.rint(v) ? Long.toString((long) v) : String.format(Locale.US, "%.1f", v);
     }
 
     public static final class Report {
@@ -326,12 +332,24 @@ public final class AlsSession {
                 hottest = Double.isNaN(hottest) ? mat : Math.max(hottest, mat);
             }
         }
+        List<Double> mins = new ArrayList<Double>();
+        for (AlsEvent e : events) {
+            double m = e.minRpm();
+            if (Stats.finite(m)) {
+                mins.add(m);
+            }
+        }
+        r.minRpm = mins.isEmpty() ? Double.NaN : Stats.median(mins);
+        // the RPM hold owns the air: while the engine is not held comfortably above the hold RPM,
+        // air cannot be given back, so a boost surplus is accepted and only the retard is removed
+        boolean airPinned = cfg.tuneAir && Stats.finite(r.minRpm) && r.minRpm - cfg.holdRpm <= 2 * cfg.holdTolRpm;
         Grid next = timing.copy();
         double nextAir = air;
         boolean allWithin = true;
         boolean anyColumn = false;
         int limitedColumns = 0;
         boolean tooMuchAtLeastRetard = false;
+        int surplusColumns = 0;
         for (int col = 0; col < rpm.size(); col++) {
             if (n[col] < cfg.minSamplesPerColumn) {
                 continue;
@@ -371,23 +389,33 @@ public final class AlsSession {
             if (mult > 1) {
                 delta = Math.round(delta / cfg.timingStepDeg) * cfg.timingStepDeg;
             }
+            // too much boost while the air is pinned by the RPM hold: no retard is needed here at all
+            boolean straightToLeastRetard = err < 0 && airPinned;
             boolean moved = false;
             for (int yi = 0; yi < next.height(); yi++) {
                 if (next.yAxis().bin(yi) > cfg.maxRowTps) {
                     continue;
                 }
                 double old = next.get(col, yi);
-                double v = Stats.clamp(old + delta, cfg.minTimingDeg, cfg.maxTimingDeg);
+                double v = straightToLeastRetard ? cfg.maxTimingDeg : Stats.clamp(old + delta, cfg.minTimingDeg, cfg.maxTimingDeg);
                 if (Math.abs(v - old) > 1e-9) {
                     moved = true;
                 }
                 next.set(col, yi, v);
             }
             lastDelta[col] = moved ? delta : 0;
-            if (moved) {
+            if (moved && straightToLeastRetard) {
+                allWithin = false;
+                r.changes.add(String.format(Locale.US, "%.0f rpm: MAP %.0f kPa above target while the %s holds the RPM -> timing straight to %.0f deg (no retard needed here)",
+                        rpm.bin(col), -err, cfg.airLabel, cfg.maxTimingDeg));
+            } else if (moved) {
                 allWithin = false;
                 r.changes.add(String.format(Locale.US, "%.0f rpm: MAP %s target by %.0f kPa -> timing %s%.0f deg",
                         rpm.bin(col), err > 0 ? "below" : "above", Math.abs(err), delta < 0 ? "" : "+", delta));
+            } else if (err < 0 && airPinned) {
+                surplusColumns++;
+                r.changes.add(String.format(Locale.US, "%.0f rpm: MAP %.0f kPa above target with no retard: the %s needed for the RPM hold makes this much boost - accepted",
+                        rpm.bin(col), -err, cfg.airLabel));
             } else if (err > 0) {
                 // as much boost as the retard limit allows: accepted, the driver is told
                 limitedColumns++;
@@ -404,38 +432,35 @@ public final class AlsSession {
                     "%d column(s) cannot reach %.0f kPa: the retard limit or the exhaust energy at that RPM is the ceiling - lower the target, or raise the hold RPM",
                     limitedColumns, cfg.targetKpa));
         }
-
-        // ---- RPM hold: the idle valve air keeps the engine from dropping below the hold RPM ----
-        List<Double> mins = new ArrayList<Double>();
-        for (AlsEvent e : events) {
-            double m = e.minRpm();
-            if (Stats.finite(m)) {
-                mins.add(m);
-            }
+        if (surplusColumns > 0) {
+            r.messages.add(String.format(Locale.US,
+                    "%d column(s) sit above %.0f kPa with no retard: lower the hold RPM if you want less boost off throttle",
+                    surplusColumns, cfg.targetKpa));
         }
-        r.minRpm = mins.isEmpty() ? Double.NaN : Stats.median(mins);
+
+        // ---- RPM hold: the second knob keeps the engine from dropping below the hold RPM ----
         boolean rpmOk = true;
         if (cfg.tuneAir && Stats.finite(r.minRpm)) {
             double shortfall = cfg.holdRpm - r.minRpm;
             if (shortfall > cfg.holdTolRpm) {
                 if (air >= cfg.airMax - 1e-9) {
                     r.messages.add(String.format(Locale.US,
-                            "RPM fell to %.0f, %.0f below the hold RPM, but the idle valve is already at its maximum %.0f - accepted",
-                            r.minRpm, shortfall, cfg.airMax));
+                            "RPM fell to %.0f, %.0f below the hold RPM, but the %s is already at its maximum %s - accepted",
+                            r.minRpm, shortfall, cfg.airLabel, num(cfg.airMax)));
                 } else {
                     rpmOk = false;
                     double mult = Stats.clamp(shortfall / (2 * cfg.holdTolRpm), 1, 3);
                     nextAir = Math.min(cfg.airMax, air + cfg.airStep * mult);
-                    r.changes.add(String.format(Locale.US, "RPM fell to %.0f (hold >= %.0f): idle valve air %.0f -> %.0f",
-                            r.minRpm, cfg.holdRpm, air, nextAir));
+                    r.changes.add(String.format(Locale.US, "RPM fell to %.0f (hold >= %.0f): %s %s -> %s",
+                            r.minRpm, cfg.holdRpm, cfg.airLabel, num(air), num(nextAir)));
                 }
             } else if (tooMuchAtLeastRetard && air > cfg.airMin + 1e-9) {
                 nextAir = Math.max(cfg.airMin, air - cfg.airStep);
-                r.changes.add(String.format(Locale.US, "Too much boost at the least retard: idle valve air %.0f -> %.0f", air, nextAir));
+                r.changes.add(String.format(Locale.US, "Too much boost at the least retard: %s %s -> %s", cfg.airLabel, num(air), num(nextAir)));
             } else if (shortfall < -2 * cfg.holdTolRpm && air > cfg.airMin + 1e-9) {
                 nextAir = Math.max(cfg.airMin, air - cfg.airStep);
-                r.changes.add(String.format(Locale.US, "RPM held at %.0f, well above %.0f: idle valve air %.0f -> %.0f (less bleed and heat)",
-                        r.minRpm, cfg.holdRpm, air, nextAir));
+                r.changes.add(String.format(Locale.US, "RPM held at %.0f, well above %.0f: %s %s -> %s (less bleed and heat)",
+                        r.minRpm, cfg.holdRpm, cfg.airLabel, num(air), num(nextAir)));
             } else {
                 r.changes.add(String.format(Locale.US, "RPM held down to %.0f (hold >= %.0f) - kept", r.minRpm, cfg.holdRpm));
             }

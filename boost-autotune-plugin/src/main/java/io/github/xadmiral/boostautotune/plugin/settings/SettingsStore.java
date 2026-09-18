@@ -386,6 +386,9 @@ public final class SettingsStore {
         p.setProperty(pre + "airStep", fmt(c.airStep));
         p.setProperty(pre + "airMin", fmt(c.airMin));
         p.setProperty(pre + "airMax", fmt(c.airMax));
+        p.setProperty(pre + "throttleStepPct", fmt(c.throttleStepPct));
+        p.setProperty(pre + "throttleMinPct", fmt(c.throttleMinPct));
+        p.setProperty(pre + "throttleMaxPct", fmt(c.throttleMaxPct));
         p.setProperty(pre + "maxMatC", fmt(c.maxMatC));
         p.setProperty(pre + "abortMatC", fmt(c.abortMatC));
         p.setProperty(pre + "stallRpm", fmt(c.stallRpm));
@@ -418,6 +421,9 @@ public final class SettingsStore {
         c.airStep = d(p, pre + "airStep", c.airStep);
         c.airMin = d(p, pre + "airMin", c.airMin);
         c.airMax = d(p, pre + "airMax", c.airMax);
+        c.throttleStepPct = d(p, pre + "throttleStepPct", c.throttleStepPct);
+        c.throttleMinPct = d(p, pre + "throttleMinPct", c.throttleMinPct);
+        c.throttleMaxPct = d(p, pre + "throttleMaxPct", c.throttleMaxPct);
         c.maxMatC = d(p, pre + "maxMatC", c.maxMatC);
         c.abortMatC = d(p, pre + "abortMatC", c.abortMatC);
         c.stallRpm = d(p, pre + "stallRpm", c.stallRpm);

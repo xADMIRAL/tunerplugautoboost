@@ -258,8 +258,38 @@ public final class EcuAdapter {
         return alsTableInfo;
     }
 
-    /** The idle valve parameter that applies to this ECU's valve type (steps for steppers, duty for PWM). */
+    /** True when drive-by-wire is on: the anti-lag then opens the throttle instead of an idle valve. */
+    public boolean alsAirIsThrottle() {
+        if (!b.has(b.alsAirDbwParam) || !b.has(b.dbwEnableParam) || !b.has(b.dbwEnableOption)) {
+            return false;
+        }
+        try {
+            String v = port.readOption(config(), b.dbwEnableParam);
+            return v != null && v.trim().equalsIgnoreCase(b.dbwEnableOption.trim());
+        } catch (EcuException e) {
+            return false;
+        }
+    }
+
+    /** ECU "operate ALS below this TPS", or NaN when not bound. */
+    public double readAlsMaxTps() throws EcuException {
+        return b.has(b.alsMaxTpsParam) ? port.readScalar(config(), b.alsMaxTpsParam) : Double.NaN;
+    }
+
+    public void writeAlsMaxTps(double pct) throws EcuException {
+        if (b.has(b.alsMaxTpsParam) && !Double.isNaN(pct)) {
+            port.writeScalar(config(), b.alsMaxTpsParam, pct);
+        }
+    }
+
+    /**
+     * The second anti-lag knob for this ECU: the DBW throttle opening when drive-by-wire is on,
+     * otherwise the idle valve (steps for steppers, duty for PWM).
+     */
     public String alsAirParam() {
+        if (alsAirIsThrottle()) {
+            return b.alsAirDbwParam;
+        }
         boolean stepper = b.has(b.alsAirStepsParam);
         if (b.has(b.idleTypeParam) && b.has(b.idleTypeStepperOption) && b.has(b.alsAirStepsParam) && b.has(b.alsAirDutyParam)) {
             try {

@@ -45,6 +45,8 @@ public final class SimEcu {
     // ---- anti-lag: timing table (rpm x tps), idle valve air, arm/operate thresholds ----
     public Grid alsTiming;
     public double alsAir = 60;
+    /** True when the second knob is a drive-by-wire throttle opening in % TPS rather than idle valve steps. */
+    public boolean alsAirIsThrottle;
     public boolean alsEnabled;
     public double alsArmTps = 50;
     public double alsOperateTps = 12;
@@ -66,7 +68,7 @@ public final class SimEcu {
             return 1500;
         }
         double retard = Math.max(0, -alsTiming.lookup(alsHoldLookupRpm, 0) - 5);
-        return 1000 + 12 * alsAir - 8 * retard;
+        return 1000 + (alsAirIsThrottle ? 90 * alsAir : 12 * alsAir) - 8 * retard;
     }
 
     private double alsHoldLookupRpm = 3000;
@@ -87,7 +89,7 @@ public final class SimEcu {
         }
         double t = alsTiming.lookup(rpm, tps);
         double retard = Math.max(0, -t - 5);          // effect starts around -5 deg
-        double airEffect = Math.max(0, alsAir - 20) * 0.35;
+        double airEffect = alsAirIsThrottle ? 2.4 * alsAir : Math.max(0, alsAir - 20) * 0.35;
         double cap = 0.8 * plantCapacity(rpm);
         return Math.min(cap, 90 + 1.4 * retard + airEffect);
     }

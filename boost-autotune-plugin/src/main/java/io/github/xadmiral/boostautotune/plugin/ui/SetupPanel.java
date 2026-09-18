@@ -116,6 +116,10 @@ public final class SetupPanel extends JPanel {
             new Row("alsDisableOption", "  ... option meaning OFF", "text"),
             new Row("alsMaxTimeParam", "Anti-lag max time per activation, s (optional)", "param"),
             new Row("alsMinRpmParam", "Anti-lag cut-off RPM (optional)", "param"),
+            new Row("alsAirDbwParam", "Anti-lag throttle opening, % TPS (drive-by-wire)", "param"),
+            new Row("dbwEnableParam", "Drive-by-wire enable parameter", "param"),
+            new Row("dbwEnableOption", "  ... option meaning ON", "text"),
+            new Row("alsMaxTpsParam", "Anti-lag operate-below TPS parameter (optional)", "param"),
             new Row("orientation", "Table orientation", "orient"),
     };
 

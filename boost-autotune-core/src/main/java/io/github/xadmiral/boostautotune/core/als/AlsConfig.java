@@ -38,11 +38,18 @@ public final class AlsConfig {
     /** Rows of the ALS timing table (TPS axis) at or below this get the change. */
     public double maxRowTps = 20;
 
-    /** Tune the idle-valve air for the RPM hold (and give it back where the anti-lag makes too much boost). */
+    /** Tune the second knob for the RPM hold (and give it back where the anti-lag makes too much boost). */
     public boolean tuneAir = true;
+    /** Idle valve (stepper steps or PWM duty): step per run and limits. */
     public double airStep = 10;
     public double airMin = 20;
     public double airMax = 160;
+    /** With drive-by-wire the second knob is the throttle opening during ALS, in % TPS: step per run and limits. */
+    public double throttleStepPct = 2.0;
+    public double throttleMinPct = 0;
+    public double throttleMaxPct = 20;
+    /** How the second knob is called in reports; the plugin sets it from the ECU ("idle valve air" / "throttle opening"). */
+    public String airLabel = "idle valve air";
 
     // ---- guards ----
     public double maxMatC = 70;
@@ -85,6 +92,10 @@ public final class AlsConfig {
         c.airStep = airStep;
         c.airMin = airMin;
         c.airMax = airMax;
+        c.throttleStepPct = throttleStepPct;
+        c.throttleMinPct = throttleMinPct;
+        c.throttleMaxPct = throttleMaxPct;
+        c.airLabel = airLabel;
         c.maxMatC = maxMatC;
         c.abortMatC = abortMatC;
         c.stallRpm = stallRpm;
@@ -122,6 +133,9 @@ public final class AlsConfig {
         }
         if (holdSec <= 0 || holdSec > 15) {
             p.add("Hold time must be between 0 and 15 s");
+        }
+        if (throttleStepPct <= 0 || throttleMinPct >= throttleMaxPct) {
+            p.add("DBW throttle: step must be positive and the minimum below the maximum");
         }
         return p;
     }

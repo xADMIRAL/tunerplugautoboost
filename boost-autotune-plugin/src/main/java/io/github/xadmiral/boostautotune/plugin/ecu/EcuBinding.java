@@ -107,6 +107,12 @@ public final class EcuBinding {
     /** ECU maximum anti-lag time per activation and cut-off RPM (optional; written from the hold settings). */
     public String alsMaxTimeParam = "";
     public String alsMinRpmParam = "";
+    /** Drive-by-wire: the throttle opening during ALS (% TPS) replaces the idle valve when DBW is on. */
+    public String alsAirDbwParam = "";
+    public String dbwEnableParam = "";
+    public String dbwEnableOption = "";
+    /** "Operate ALS below this TPS": kept above the DBW throttle opening so the ALS does not switch itself off. */
+    public String alsMaxTpsParam = "";
 
     public TableOrientation orientation = TableOrientation.AUTO;
 
@@ -183,8 +189,11 @@ public final class EcuBinding {
         checkParam(problems, params, "ALS enable parameter", alsEnableParam, false);
         checkParam(problems, params, "ALS max time parameter", alsMaxTimeParam, false);
         checkParam(problems, params, "ALS cut-off RPM parameter", alsMinRpmParam, false);
-        if (!has(alsAirStepsParam) && !has(alsAirDutyParam)) {
-            problems.add("At least one ALS idle valve parameter (steps or duty) is required");
+        checkParam(problems, params, "ALS throttle opening (DBW) parameter", alsAirDbwParam, false);
+        checkParam(problems, params, "Drive-by-wire enable parameter", dbwEnableParam, false);
+        checkParam(problems, params, "ALS operate-below TPS parameter", alsMaxTpsParam, false);
+        if (!has(alsAirStepsParam) && !has(alsAirDutyParam) && !has(alsAirDbwParam)) {
+            problems.add("At least one ALS air parameter (idle valve steps / duty, or DBW throttle opening) is required");
         }
         return problems;
     }
@@ -346,6 +355,10 @@ public final class EcuBinding {
         p.setProperty(prefix + "alsDisableOption", alsDisableOption);
         p.setProperty(prefix + "alsMaxTimeParam", alsMaxTimeParam);
         p.setProperty(prefix + "alsMinRpmParam", alsMinRpmParam);
+        p.setProperty(prefix + "alsAirDbwParam", alsAirDbwParam);
+        p.setProperty(prefix + "dbwEnableParam", dbwEnableParam);
+        p.setProperty(prefix + "dbwEnableOption", dbwEnableOption);
+        p.setProperty(prefix + "alsMaxTpsParam", alsMaxTpsParam);
         p.setProperty(prefix + "orientation", orientation.name());
     }
 
@@ -421,6 +434,10 @@ public final class EcuBinding {
         alsDisableOption = p.getProperty(prefix + "alsDisableOption", alsDisableOption);
         alsMaxTimeParam = p.getProperty(prefix + "alsMaxTimeParam", alsMaxTimeParam);
         alsMinRpmParam = p.getProperty(prefix + "alsMinRpmParam", alsMinRpmParam);
+        alsAirDbwParam = p.getProperty(prefix + "alsAirDbwParam", alsAirDbwParam);
+        dbwEnableParam = p.getProperty(prefix + "dbwEnableParam", dbwEnableParam);
+        dbwEnableOption = p.getProperty(prefix + "dbwEnableOption", dbwEnableOption);
+        alsMaxTpsParam = p.getProperty(prefix + "alsMaxTpsParam", alsMaxTpsParam);
         try {
             orientation = TableOrientation.valueOf(p.getProperty(prefix + "orientation", orientation.name()));
         } catch (IllegalArgumentException e) {

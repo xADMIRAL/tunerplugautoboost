@@ -93,6 +93,10 @@ public final class EcuPresets {
             b.alsDisableOption = "Off";
             b.alsMaxTimeParam = "als_maxtime";
             b.alsMinRpmParam = "als_minrpm";
+            b.alsAirDbwParam = "als_iac_pos";
+            b.dbwEnableParam = "drivebywire_opt_on";
+            b.dbwEnableOption = "On";
+            b.alsMaxTpsParam = "als_maxtps";
         } else if (SPEEDUINO.equals(name)) {
             b.rpmChannel = "rpm";
             b.tpsChannel = "tps";

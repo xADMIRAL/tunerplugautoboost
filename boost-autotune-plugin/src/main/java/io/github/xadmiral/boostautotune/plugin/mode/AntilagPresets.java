@@ -78,6 +78,11 @@ public final class AntilagPresets {
     }
 
     public static List<Setting> create(String name) {
+        return create(name, false);
+    }
+
+    /** @param driveByWire the ECU runs a DBW throttle: the anti-lag opens the throttle instead of an idle valve */
+    public static List<Setting> create(String name, boolean driveByWire) {
         List<Setting> s = new ArrayList<Setting>();
         if (OFF.equals(name)) {
             s.add(new Setting(GROUP_ALS, "als_in_pin", "Off", "anti-lag disabled"));
@@ -92,6 +97,7 @@ public final class AntilagPresets {
         String pause = pick(level, "4", "3", "2");
         String maxMat = pick(level, "60", "65", "75");
         String iac = pick(level, "90", "100", "140");
+        String throttlePct = pick(level, "6", "8", "12");
         String timing = pick(level, "-12", "-16", "-22");
         String addFuel = pick(level, "10", "15", "25");
         String sparkCut = pick(level, "25", "30", "50");
@@ -111,7 +117,11 @@ public final class AntilagPresets {
         s.add(new Setting(GROUP_ALS, "als_opt_fc", "Off", "cyclic fuel cut: sequential only, unsafe with staging"));
         s.add(new Setting(GROUP_ALS, "als_opt_idle", "On", "extra air through the idle valve"));
         s.add(new Setting(GROUP_ALS, "als_opt_ri", "Off", "roving idle fuel cut"));
-        s.add(new Setting(GROUP_ALS, "als_iac_steps", iac, "stepper valve: steps of air during ALS (autotune refines for the RPM hold)"));
+        if (driveByWire) {
+            s.add(new Setting(GROUP_ALS, "als_iac_pos", throttlePct, "drive-by-wire: throttle opening % during ALS (autotune refines for the RPM hold)"));
+        } else {
+            s.add(new Setting(GROUP_ALS, "als_iac_steps", iac, "stepper valve: steps of air during ALS (autotune refines for the RPM hold)"));
+        }
         s.add(new Setting(GROUP_ALS, "als_rpms", "2000 3000 4000 5000 6000 7000", "RPM axis of the ALS tables"));
         s.add(new Setting(GROUP_ALS, "als_tpss", "0 4 8 12 16 20", "TPS axis of the ALS tables"));
         s.add(new Setting(GROUP_ALS, "als_timing", timing, "absolute timing during ALS, whole table (autotune refines per RPM)"));

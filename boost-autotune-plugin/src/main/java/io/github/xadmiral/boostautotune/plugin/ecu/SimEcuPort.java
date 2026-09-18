@@ -92,6 +92,8 @@ public final class SimEcuPort implements EcuPort {
         arrays.put("als_fuelcut", filled(6, 6, 80));
         scalars.put(b.alsAirStepsParam, 150.0);
         scalars.put(b.alsAirDutyParam, 58.8);
+        scalars.put(b.alsAirDbwParam, 10.0);
+        options.put(b.dbwEnableParam, "Off");
         scalars.put("als_acttps", 50.0);
         scalars.put("als_maxtps", 30.0);
         scalars.put("als_minrpm", 500.0);
@@ -124,7 +126,8 @@ public final class SimEcuPort implements EcuPort {
         ecu.vvtPid = new PidGains(scalars.get(b.vvtPidP), scalars.get(b.vvtPidI), scalars.get(b.vvtPidD));
         ecu.sparkTable = grid(b.sparkTable, b.sparkXBins, b.sparkYBins);
         ecu.alsTiming = grid(b.alsTimingTable, b.alsXBins, b.alsYBins);
-        ecu.alsAir = scalars.get(b.alsAirStepsParam);
+        ecu.alsAirIsThrottle = b.dbwEnableOption.equals(options.get(b.dbwEnableParam));
+        ecu.alsAir = ecu.alsAirIsThrottle ? scalars.get(b.alsAirDbwParam) : scalars.get(b.alsAirStepsParam);
         ecu.alsEnabled = !"Off".equals(options.get(b.alsEnableParam));
         ecu.alsArmTps = scalars.get("als_acttps");
         ecu.alsOperateTps = scalars.get("als_maxtps");
@@ -218,7 +221,7 @@ public final class SimEcuPort implements EcuPort {
         if (scalars.containsKey(name)) {
             double max = name.contains("Kp") || name.contains("Ki") || name.contains("Kd") ? 200 : name.equals("als_iac_steps") ? 255
                     : name.contains("rpm") || name.contains("_arm") || name.contains("_hrd") || name.contains("_lim") ? 25000
-                    : name.equals("boost_ctl_lowerlimit") ? 200 : 100;
+                    : name.equals("boost_ctl_lowerlimit") ? 200 : name.equals("als_iac_pos") ? 25.5 : 100;
             double min = name.equals("flats_deg") ? -90 : name.equals("boost_ctl_lowerlimit") ? 5 : 0;
             return new ParamInfo("scalar", "", min, max, name.equals("als_iac_steps") ? 0 : 1, 1, 1, Collections.<String>emptyList());
         }

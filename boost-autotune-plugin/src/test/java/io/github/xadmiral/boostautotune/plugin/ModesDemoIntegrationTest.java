@@ -249,4 +249,58 @@ class ModesDemoIntegrationTest {
         assertEquals(3, port.readScalar(SimEcuPort.CONFIG, b.alsMaxTimeParam), 1e-9);
         assertEquals("Always ON", port.readOption(SimEcuPort.CONFIG, b.alsEnableParam));
     }
+
+    @Test
+    void antilagWithDriveByWireOpensTheThrottleForTheRpmHold() throws Exception {
+        SimEcuPort port = new SimEcuPort();
+        Collector listener = new Collector();
+        TuneController ctl = new TuneController(listener);
+        ctl.setPort(port);
+        EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
+        b.timeChannel = "seconds";
+        EcuAdapter setup = new EcuAdapter(port, b);
+        setup.writeAny(b.dbwEnableParam, "On");
+        boolean hasPos = false, hasSteps = false;
+        for (AntilagPresets.Setting s : AntilagPresets.create(AntilagPresets.DRIFT_MEDIUM, true)) {
+            hasPos |= s.param.equals("als_iac_pos");
+            hasSteps |= s.param.equals("als_iac_steps");
+            if (setup.hasParameter(s.param)) {
+                setup.writeAny(s.param, s.value);
+            }
+        }
+        assertTrue(hasPos && !hasSteps, "a DBW preset carries the throttle opening, not idle valve steps");
+        setup.writeAny(b.alsTimingTable, "-8");
+        setup.writeAny("als_iac_pos", "4");     // barely open: the hold has to come from the autotune
+        setup.writeAny(b.alsMaxTpsParam, "6");  // and the ALS must not switch itself off as the throttle opens
+        double stepsBefore = port.readScalar(SimEcuPort.CONFIG, b.alsAirStepsParam);
+        AlsConfig cfg = new AlsConfig();
+        cfg.targetKpa = 130;
+        cfg.holdRpm = 2600;
+        cfg.holdSec = 2.5;
+        cfg.autoEndRunIdleSec = 0;
+        ctl.startAntilagSession(cfg, b);
+        assertTrue(String.join("\n", listener.log).contains("throttle opening"), "the session must say it works the throttle");
+        int runs = 0;
+        while (ctl.state() != SessionState.DONE && runs < 12) {
+            ctl.writePlanToEcu();
+            ctl.startRun();
+            port.simulateAntilag(3, 1000);
+            waitForStream(port);
+            port.coolDown(60);
+            assertNotEquals(SessionState.ABORTED, ctl.state(), ctl.abortReason());
+            ctl.endRun();
+            ctl.applyAndPrepareNext();
+            runs++;
+        }
+        assertEquals(SessionState.DONE, ctl.state(), String.join("\n", listener.log));
+        double pos = port.readScalar(SimEcuPort.CONFIG, "als_iac_pos");
+        assertTrue(pos > 12 && pos <= 20, "throttle opening " + pos);
+        assertEquals(stepsBefore, port.readScalar(SimEcuPort.CONFIG, b.alsAirStepsParam), 1e-9, "idle valve steps untouched on DBW");
+        assertTrue(port.readScalar(SimEcuPort.CONFIG, b.alsMaxTpsParam) >= pos + 3 - 1e-9, "als_maxtps follows the opening");
+        AlsSession.Report last = (AlsSession.Report) listener.last;
+        assertTrue(last.minRpm >= cfg.holdRpm - cfg.holdTolRpm, "RPM held down to " + last.minRpm);
+        ctl.restoreOriginal();
+        assertEquals(4, port.readScalar(SimEcuPort.CONFIG, "als_iac_pos"), 1e-9);
+        assertEquals(6, port.readScalar(SimEcuPort.CONFIG, b.alsMaxTpsParam), 1e-9);
+    }
 }

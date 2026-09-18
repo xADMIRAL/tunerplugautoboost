@@ -61,8 +61,10 @@ The **Anti-lag** tab: a drift mode, three autotune goals, and advanced settings 
   (street)" preset switches it all back. Old values are kept for **Restore original**; burn in
   TunerStudio when happy.
 * **Goals.** *Boost off throttle* (kPa absolute) is tuned with ignition retard per RPM column of
-  `als_timing`; *do not let RPM fall below* is tuned with idle-valve air (`als_iac_steps` or
-  `als_iac_duty`, picked by `IdleCtl`), and `als_minrpm` is written 700 rpm below it; *hold for*
+  `als_timing`; *do not let RPM fall below* is tuned with the throttle opening during ALS on drive-by-wire
+  (`als_iac_pos`, % TPS, when `drivebywire_opt_on` is on; `als_maxtps` is kept above the opening)
+  or with idle-valve air otherwise (`als_iac_steps` or `als_iac_duty`, picked by `IdleCtl`), and
+  `als_minrpm` is written 700 rpm below it; *hold for*
   (seconds) is written to `als_maxtime`. A run is 3-5 full lifts from WOT held closed for about
   the hold time plus one second; the report shows boost and the lowest RPM per event and the new
   retard and air; done after two good runs in a row. Guards: MAT warning 70 °C / abort 80 °C
