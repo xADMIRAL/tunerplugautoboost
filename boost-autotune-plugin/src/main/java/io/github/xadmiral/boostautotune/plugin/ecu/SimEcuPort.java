@@ -113,9 +113,26 @@ public final class SimEcuPort implements EcuPort {
         options.put("als_opt_fc", "Off");
         options.put("als_opt_idle", "Off");
         options.put("als_opt_ri", "Off");
+        options.put("als_opt_fuel", "Off");
         options.put("launch_opt_on", "Off");
         options.put("launchlimopt", "Spark Cut");
+        // over-run fuel cut: the base tune's street settings
         options.put("OvrRunC", "On");
+        options.put("OvrRunC_progcut", "Off");
+        options.put("OvrRunC_progign", "Off");
+        options.put("OvrRunC_progret", "On");
+        options.put("OvrRunC_retign", "Off");
+        scalars.put("fc_rpm", 2000.0);
+        scalars.put("fc_kpa", 38.0);
+        scalars.put("fc_tps", 1.0);
+        scalars.put("fc_clt_C", 70.0);
+        scalars.put("fc_delay", 0.0);
+        scalars.put("fc_timing", 0.0);
+        scalars.put("fc_transition_time", 0.6);
+        scalars.put("fc_trans_time_ret", 0.5);
+        scalars.put("fc_rpm_lower", 1200.0);
+        scalars.put("fc_ae_time", 0.0);
+        scalars.put("fc_ae_pct", 0.0);
         // knock: the base tune's threshold curve, the internal module listening per cylinder, gains
         // roughly right for this engine (a fresh MS3 has 1.000 everywhere: far too loud)
         arrays.put(b.knockRpmBins, column(2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 7000));
@@ -259,8 +276,10 @@ public final class SimEcuPort implements EcuPort {
         if (scalars.containsKey(name)) {
             double max = name.contains("Kp") || name.contains("Ki") || name.contains("Kd") ? 200 : name.equals("als_iac_steps") ? 255
                     : name.contains("rpm") || name.contains("_arm") || name.contains("_hrd") || name.contains("_lim") ? 25000
-                    : name.equals("boost_ctl_lowerlimit") ? 200 : name.equals("als_iac_pos") ? 25.5 : 100;
-            double min = name.equals("flats_deg") ? -90 : name.equals("boost_ctl_lowerlimit") ? 5 : 0;
+                    : name.equals("boost_ctl_lowerlimit") ? 200 : name.equals("als_iac_pos") ? 25.5
+                    : name.equals("fc_kpa") ? 400 : name.equals("fc_ae_pct") ? 255 : name.equals("fc_timing") ? 180 : 100;
+            double min = name.equals("flats_deg") || name.equals("fc_timing") ? -90 : name.equals("boost_ctl_lowerlimit") ? 5
+                    : name.equals("fc_trans_time_ret") || name.equals("fc_transition_time") ? 0.5 : 0;
             return new ParamInfo("scalar", "", min, max, name.equals("als_iac_steps") ? 0 : 1, 1, 1, Collections.<String>emptyList());
         }
         if (options.containsKey(name)) {

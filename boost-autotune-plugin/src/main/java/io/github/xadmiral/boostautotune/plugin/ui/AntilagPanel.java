@@ -134,6 +134,8 @@ public final class AntilagPanel extends JPanel {
                 "Pick a drift mode: it fills the ECU settings below and the three autotune goals (edit anything before writing; "
                         + "'Restore original' undoes). Autotune: full lifts from WOT, throttle closed for the hold time. "
                         + "Retard is tuned for the boost, idle-valve air for the RPM hold, the ECU anti-lag time for the seconds. "
+                        + "The two 'Popcorn' presets only make pops on lift (over-run window for the street, anti-lag always on "
+                        + "for the loud version); they carry no autotune goals. "
                         + "Anti-lag cooks the turbo: short runs, watch MAT, cool-down laps.");
         intro.setEditable(false);
         intro.setLineWrap(true);
@@ -354,7 +356,10 @@ public final class AntilagPanel extends JPanel {
                     name, g.targetKpa, g.holdRpm, g.holdSec));
             onChanged.run();
         }
-        presetStatus.setText("Mode '" + name + "' loaded" + (dbw ? " (drive-by-wire: throttle opening instead of idle valve steps)" : "") + ", nothing written yet.");
+        if (AntilagPresets.isPopcorn(name)) {
+            status.setText("Popcorn preset: ECU settings only, the autotune goals are unchanged.");
+        }
+        presetStatus.setText("Mode '" + name + "' loaded" + (dbw && !AntilagPresets.isPopcorn(name) ? " (drive-by-wire: throttle opening instead of idle valve steps)" : "") + ", nothing written yet.");
         readCurrent(false);
     }
 

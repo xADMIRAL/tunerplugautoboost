@@ -72,8 +72,38 @@ The **Anti-lag** tab: a drift mode, three autotune goals, and advanced settings 
   run; an abort restores the original settings and sets `als_in_pin = Off`. ALS activity comes
   from bit 128 of `status10`, or TPS <= 12 % without it.
 
+* **Popcorn presets.** Two more entries in the drift-mode list write ECU settings only, no
+  goals. *Popcorn - over-run window (street)* keeps the over-run cut but opens a window first
+  (`fc_delay` 0.3 s, `fc_transition_time` 2.5 s) in which the timing ramps to `fc_timing` -20 deg
+  and the injectors are dropped progressively; the pops last the window, then the quiet cut takes
+  over; above `fc_rpm` 2500 and below `fc_kpa` 45 only, fuel back by `fc_rpm_lower` 1500, ALS
+  switched off. *Popcorn - anti-lag always on (loud)* arms the ALS permanently without the air
+  (`als_opt_idle = Off`): 30 % spark cut, +12 % fuel, -18 deg, 2 s per lift, 2500..6000 rpm, and
+  `OvrRunC = Off` because the pops need fuel.
+
 Anti-lag cooks the turbo, the manifold and the catalyst: short runs, cool-down laps, a working
 intake air temperature sensor. Not for the street.
+
+## Claude assistant
+
+The **Assistant** tab is a chat with Claude inside TunerStudio. The model sees the connected
+ECU through the plugin: it finds and reads any INI parameter or table (`list_parameters`,
+`read_parameters`, tables come with their axes), watches live channels and their recent history
+(`read_channels`, `channel_history`), and proposes edits (`propose_change` for scalars, options,
+axes and table fills; `propose_table_cells` for single cells). Every proposal lands in the
+*Proposed changes* table with a reason; you apply it (*Apply selected* / *Apply all pending*),
+reject it, or put everything back (*Restore all applied*). It cannot burn: that stays a
+TunerStudio button.
+
+Settings: the API key (kept in your user preferences, never in the plugin's settings file), the
+model (`claude-opus-5` by default; `claude-fable-5-1` or `claude-sonnet-5` are listed), a base
+URL for a proxy or gateway, `effort` (empty = the API default), *Refusal fallbacks* (server-side
+fallback when the model declines, beta) and *Auto-apply* (write proposals at once, off by
+default). *Car profile and notes* goes into the system prompt of every conversation. The
+assistant answers in the language you write in, moves in small steps (at most +2 deg timing,
++20 kPa boost target, 5 % VE per step) and must read a parameter before proposing a value.
+Requests go to the Messages API over HTTPS with the JDK alone: no third-party libraries in the
+jar, the JVM's proxy settings apply. Ctrl+Enter sends.
 
 ## Knock sensor calibration
 

@@ -154,6 +154,28 @@ Launch/Flatshift` + `launchlimopt = Spark Cut`, `OvrRunC = Off` (отсечка 
 антилагу). Пресет **Off (street)** возвращает `als_in_pin = Off`, `launch_opt_on = Off`,
 `OvrRunC = On`. Параметров, которых нет в вашем INI, плагин не трогает.
 
+### Пресеты Popcorn: хлопки на сбросе газа
+
+Два пресета в том же списке *Drift mode* пишут только настройки ECU, целей автотюна у них нет.
+
+* **Popcorn — over-run window (street).** Отсечка на сбросе остаётся, но включается не сразу:
+  после `fc_delay` 0.3 с открывается окно `fc_transition_time` 2.5 с, в котором зажигание уходит
+  к `fc_timing` −20° (`OvrRunC_progign = On`), а форсунки отключаются по одной
+  (`OvrRunC_progcut = On`). Несгоревшая смесь догорает в коллекторе всё окно, потом наступает
+  обычная тихая отсечка. Условия: выше `fc_rpm` 2500, ниже `fc_kpa` 45, CLT от 75 °C. Возврат:
+  `OvrRunC_progret`/`OvrRunC_retign = On`, `fc_trans_time_ret` 0.5 с, топливо снова к
+  `fc_rpm_lower` 1500, добавка `fc_ae_pct` 5 % на 0.3 с. Антилаг выключается (`als_in_pin = Off`),
+  чтобы не спорить с окном. Громкость: длина окна (1…5 с), угол (−10…−30), VE в строках 30–45 кПа.
+* **Popcorn — anti-lag always on (loud).** Антилаг взведён постоянно (`als_in_pin = Always ON`,
+  взвод выше 60 % TPS, работа ниже `als_maxtps` 6 %), но без воздуха (`als_opt_idle = Off`): он
+  стреляет, а не держит буст. Пропуск искры `als_sparkcut` 30 %, добавка топлива
+  `als_opt_fuel = On` / `als_addfuel` 12 %, `als_timing` −18°, 2 с на сброс с паузой 1.5 с,
+  обороты 2500…6000, CLT от 75, MAT до 70. Отсечка `OvrRunC = Off`: хлопкам нужно топливо.
+
+Проверка по логу: на сбросе появляется `SPK: Fuel cut retard`, он уходит в ноль до 1500 об., и
+только потом `EGO open loop reason` = 7. Оба пресета греют коллектор и турбину и убивают
+катализатор; окно не длиннее 3 с, только на прогретом моторе.
+
 ### Автотюн антилага: три цели
 
 * **Boost off throttle** — давление во впуске на закрытом газе, кПа абс. Ручка — запаздывание
@@ -190,6 +212,31 @@ Launch/Flatshift` + `launchlimopt = Spark Cut`, `OvrRunC = Off` (отсечка 
 **Осторожно.** Антилаг сжигает турбину, коллектор и катализатор: короткие прогоны, круги
 охлаждения между ними, исправный датчик температуры во впуске и система охлаждения обязательны.
 Не для улицы.
+
+## Ассистент Claude
+
+![Assistant tab: chat with Claude, car profile, proposed changes](docs/screenshots/assistant.png)
+
+Вкладка **Assistant** — чат с Claude прямо в TunerStudio. Модель видит подключённый ECU через
+плагин: находит и читает любые параметры и таблицы INI (`list_parameters`, `read_parameters`,
+таблицы приходят с осями), смотрит живые каналы и их историю за последние минуты
+(`read_channels`, `channel_history`), и предлагает правки (`propose_change` для скаляров,
+опций, осей и заливки таблицы; `propose_table_cells` для отдельных ячеек). Каждое предложение
+попадает в таблицу *Proposed changes* с причиной; вы применяете его кнопкой (*Apply selected* /
+*Apply all pending*), отклоняете или откатываете всё применённое (*Restore all applied*).
+Прожечь ассистент не может — Burn остаётся в TunerStudio.
+
+Настройки: ключ API (хранится в пользовательских preferences, не в файле настроек плагина),
+модель (`claude-opus-5` по умолчанию, можно `claude-fable-5-1` или `claude-sonnet-5`), базовый
+URL (для прокси/шлюза), усилие (`effort`, пусто = по умолчанию API), *Refusal fallbacks*
+(серверный запасной маршрут при отказе модели, бета) и *Auto-apply* — писать предложения в ECU
+сразу, без кнопки (выключено по умолчанию). Поле *Car profile and notes* уходит в системный
+промпт каждого разговора: опишите машину, цели и что показали последние логи.
+
+Ассистент отвечает на языке вопроса, ходит малыми шагами (не больше +2° зажигания, +20 кПа
+цели буста, 5 % VE за раз) и обязан прочитать параметр перед тем, как предложить новое
+значение. Запросы идут в Messages API по HTTPS средствами JDK — никаких сторонних библиотек в
+jar, работают системные настройки прокси Java. Ctrl+Enter отправляет сообщение.
 
 ## Калибровка датчиков детонации
 
@@ -377,7 +424,8 @@ boost-autotune-plugin/  Swing UI и связка с TunerStudio
                         EcuBinding + EcuPresets, EcuAdapter (ориентация таблиц, чтение/запись), LiveFeed
   mode/                 ModeDriver: BoostDriver / SweepDriver / VvtPidDriver / AntilagDriver / KnockCalDriver — режимы поверх ECU,
                         AntilagPresets — пресеты дрифта (ALS / flat shift / over-run)
-  ui/                   Autotune / Boost / VVT / Ignition / Anti-lag / Knock / Setup / Analysis / Log
+  assistant/            чат с Claude: Messages API по HTTPS (JDK), инструменты чтения ECU и очередь правок
+  ui/                   Autotune / Boost / VVT / Ignition / Anti-lag / Knock / Assistant / Setup / Analysis / Log
   BoostAutotunePlugin   точка входа (манифест: ApplicationPlugin)
   DemoLauncher          запуск UI с симулятором
 repo/                   вендоренный TunerStudioPluginAPI.jar (только для компиляции)

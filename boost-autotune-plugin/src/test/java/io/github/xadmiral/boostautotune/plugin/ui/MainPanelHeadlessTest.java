@@ -43,6 +43,22 @@ class MainPanelHeadlessTest {
         p.alsConfig().targetKpa = 135;
         p.knockConfig().noiseTargetPct = 45;
         assertTrue(p.antilagPanel().presetRowCount() > 20);
+        assertNotNull(p.assistantPanel());
+        p.assistantConfig().profile = "Altezza 2JZ";
+        p.assistantConfig().autoApply = true;
+        p.assistantConfig().apiKey = "sk-secret";
+        SwingUtilities.invokeAndWait(new Runnable() {
+            public void run() {
+                holder[0].setFontScale(1.5); // any save carries the assistant settings along
+            }
+        });
+        Properties again = new SettingsStore(f).loadRaw();
+        assertEquals("Altezza 2JZ", again.getProperty("ui.assistant.profile"));
+        assertEquals("true", again.getProperty("ui.assistant.autoApply"));
+        assertEquals("claude-opus-5", again.getProperty("ui.assistant.model"));
+        for (String k : again.stringPropertyNames()) {
+            assertFalse(again.getProperty(k).contains("sk-secret"), "the API key must not be in the settings file: " + k);
+        }
         SettingsStore store = new SettingsStore(f);
         store.save(p.config(), p.vvtSweepConfig(), p.ignitionSweepConfig(), p.vvtPidConfig(), p.alsConfig(), p.knockConfig(), p.binding(), new Properties());
         assertTrue(f.exists());

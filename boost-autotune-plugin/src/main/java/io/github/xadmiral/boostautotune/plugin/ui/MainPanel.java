@@ -8,6 +8,7 @@ import io.github.xadmiral.boostautotune.core.model.Sample;
 import io.github.xadmiral.boostautotune.core.sweep.SweepConfig;
 import io.github.xadmiral.boostautotune.core.vvt.VvtPidConfig;
 import io.github.xadmiral.boostautotune.plugin.TuneController;
+import io.github.xadmiral.boostautotune.plugin.assistant.AssistantConfig;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuBinding;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuPort;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuPresets;
@@ -32,6 +33,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
     private final VvtPidConfig vvtPid = new VvtPidConfig();
     private final AlsConfig als = new AlsConfig();
     private final KnockCalConfig knock = new KnockCalConfig();
+    private final AssistantConfig assistantCfg = new AssistantConfig();
     private final EcuBinding binding;
     private final SettingsStore store;
     private final TuneController ctl;
@@ -41,6 +43,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
     private final IgnitionPanel ignitionPanel;
     private final AntilagPanel antilagPanel;
     private final KnockPanel knockPanel;
+    private final AssistantPanel assistantPanel;
     private final AutotunePanel autotune;
     private final AnalysisPanel analysis;
     private final LogPanel logPanel = new LogPanel();
@@ -70,6 +73,8 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
             b.timeChannel = "seconds";
         }
         this.binding = b;
+        assistantCfg.load(uiPrefs, "assistant.");
+        assistantCfg.loadKey();
         ctl = new TuneController(this);
         ctl.setPort(port);
         Runnable save = new Runnable() {
@@ -87,6 +92,11 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
             }
         });
         knockPanel = new KnockPanel(knock, save);
+        assistantPanel = new AssistantPanel(assistantCfg, binding, port, save, new AssistantPanel.Log() {
+            public void line(String s) {
+                logPanel.append(s);
+            }
+        });
         autotune = new AutotunePanel(ctl, new Runnable() {
             public void run() {
                 startSession();
@@ -99,6 +109,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         tabs.addTab("Ignition", ignitionPanel);
         tabs.addTab("Anti-lag", antilagPanel);
         tabs.addTab("Knock", knockPanel);
+        tabs.addTab("Assistant", assistantPanel);
         tabs.addTab("Setup", setup);
         tabs.addTab("Analysis", analysis);
         tabs.addTab("Log", logPanel);
@@ -157,6 +168,14 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         return knockPanel;
     }
 
+    public AssistantPanel assistantPanel() {
+        return assistantPanel;
+    }
+
+    public AssistantConfig assistantConfig() {
+        return assistantCfg;
+    }
+
     public TargetsPanel targetsPanel() {
         return targets;
     }
@@ -197,6 +216,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         }
         try {
             uiPrefs.setProperty("fontScale", Fonts.choiceFor(fontScale));
+            assistantCfg.store(uiPrefs, "assistant.");
             store.save(cfg, vvtSweep, ignSweep, vvtPid, als, knock, binding, uiPrefs);
         } catch (IOException e) {
             logPanel.append("Could not save settings: " + e.getMessage());
@@ -372,6 +392,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
     public void dispose() {
         ctl.abort("Plugin closed");
         autotune.dispose();
+        assistantPanel.dispose();
         saveSettings();
     }
 }
