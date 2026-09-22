@@ -213,8 +213,16 @@ public final class SmoothPanel extends JPanel {
         JPanel p = new JPanel(new BorderLayout());
         JLabel l = new JLabel(title);
         p.add(l, BorderLayout.NORTH);
-        p.add(new JScrollPane(t), BorderLayout.CENTER);
+        // fixed column widths and a horizontal scrollbar: 16 columns must stay readable
+        t.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        p.add(new JScrollPane(t, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED), BorderLayout.CENTER);
         return p;
+    }
+
+    private static void sizeColumns(JTable t) {
+        for (int c = 0; c < t.getColumnCount(); c++) {
+            t.getColumnModel().getColumn(c).setPreferredWidth(c == 0 ? 64 : 56);
+        }
     }
 
     private String config() {
@@ -302,6 +310,7 @@ public final class SmoothPanel extends JPanel {
             currentModel.setFormat(fmt());
             currentModel.setYLabel("load \\ rpm");
             currentModel.setGrid(current, null);
+            sizeColumns(currentTable);
             previewModel.setFormat(fmt());
             previewModel.setYLabel("load \\ rpm");
             previewModel.setGrid(null, null);
@@ -347,6 +356,7 @@ public final class SmoothPanel extends JPanel {
         }
         preview = TableSmoother.smooth(current, settings);
         previewModel.setGrid(preview.smoothed, current);
+        sizeColumns(previewTable);
         stats.setText(preview.summary());
         writeBtn.setEnabled(preview.changedCells > 0);
         status.setText(preview.changedCells > 0 ? "Preview ready: check the coloured cells, then Write to ECU" : "Nothing to change with these settings");
@@ -374,6 +384,7 @@ public final class SmoothPanel extends JPanel {
             log.line("[smooth] " + zName + " written: " + preview.summary());
             current = preview.smoothed.copy();
             currentModel.setGrid(current, original);
+            sizeColumns(currentTable);
             previewModel.setGrid(null, null);
             preview = null;
             writeBtn.setEnabled(false);
@@ -396,6 +407,7 @@ public final class SmoothPanel extends JPanel {
             current = original.copy();
             original = null;
             currentModel.setGrid(current, null);
+            sizeColumns(currentTable);
             previewModel.setGrid(null, null);
             preview = null;
             writeBtn.setEnabled(false);
