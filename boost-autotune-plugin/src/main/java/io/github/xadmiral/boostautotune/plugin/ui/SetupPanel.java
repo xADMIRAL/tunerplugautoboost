@@ -33,6 +33,17 @@ import java.util.Properties;
 /** ECU connection and channel / parameter mapping. */
 public final class SetupPanel extends JPanel {
 
+    /** Where the current live-feed status text comes from (the controller). */
+    public interface StatusSource {
+        String text();
+    }
+
+    private StatusSource feedStatus;
+
+    public void setFeedStatus(StatusSource s) {
+        feedStatus = s;
+    }
+
     /** One editable line of the binding. */
     private static final class Row {
         final String key;
@@ -174,11 +185,18 @@ public final class SetupPanel extends JPanel {
         JButton detect = new JButton("Auto-detect");
         JButton validate = new JButton("Validate");
         JButton preview = new JButton("Read tables");
+        JButton liveBtn = new JButton("Read live values");
         top.add(apply);
         top.add(detect);
         top.add(validate);
         top.add(preview);
+        top.add(liveBtn);
         add(top, BorderLayout.NORTH);
+        liveBtn.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                readLiveValues();
+            }
+        });
 
         table.setRowHeight(22);
         table.getColumnModel().getColumn(0).setPreferredWidth(260);
@@ -448,6 +466,42 @@ public final class SetupPanel extends JPanel {
         } catch (RuntimeException e) {
             say("Read failed: " + e);
         }
+    }
+
+    /** Reads every bound channel once and shows what the live feed is doing: the first thing to check when Live stays empty. */
+    public String readLiveValues() {
+        commit();
+        StringBuilder sb = new StringBuilder();
+        if (feedStatus != null) {
+            sb.append("Live feed: ").append(feedStatus.text()).append("\n\n");
+        }
+        if (port == null) {
+            sb.append("No ECU connection\n");
+            say(sb.toString());
+            return sb.toString();
+        }
+        List<String> names = new io.github.xadmiral.boostautotune.plugin.ecu.LiveFeed(binding.copy(), null).requiredChannels();
+        double[] v = port.pollChannels(currentConfig(), names);
+        if (v == null) {
+            sb.append("This ECU port streams its values (demo): nothing to poll. Press a Simulate button on the Autotune tab.\n");
+        } else {
+            sb.append("Channel values read from TunerStudio right now (configuration '").append(currentConfig()).append("'):\n");
+            int missing = 0;
+            for (int i = 0; i < names.size(); i++) {
+                boolean nan = Double.isNaN(v[i]);
+                if (nan) {
+                    missing++;
+                }
+                sb.append(String.format(java.util.Locale.US, "  %-20s %s\n", names.get(i), nan ? "no value (unknown channel or not evaluable)" : Form.fmt(v[i])));
+            }
+            if (missing == names.size()) {
+                sb.append("\nNo channel could be read: is TunerStudio connected to the ECU (gauges moving) and is this the right configuration?\n");
+            } else if (missing > 0) {
+                sb.append("\n").append(missing).append(" channel(s) could not be read: fix their names above (Validate marks them MISSING).\n");
+            }
+        }
+        say(sb.toString());
+        return sb.toString();
     }
 
     private void say(String s) {

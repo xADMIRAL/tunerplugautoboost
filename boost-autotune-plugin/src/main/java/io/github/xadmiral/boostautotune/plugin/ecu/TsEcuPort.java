@@ -2,6 +2,7 @@ package io.github.xadmiral.boostautotune.plugin.ecu;
 
 import com.efiAnalytics.plugin.ecu.ControllerAccess;
 import com.efiAnalytics.plugin.ecu.ControllerException;
+import com.efiAnalytics.plugin.ecu.MathException;
 import com.efiAnalytics.plugin.ecu.ControllerParameter;
 import com.efiAnalytics.plugin.ecu.OutputChannelClient;
 import com.efiAnalytics.plugin.ecu.UiTable;
@@ -206,6 +207,8 @@ public final class TsEcuPort implements EcuPort {
                 channels().subscribe(config, ch, client);
             } catch (ControllerException e) {
                 throw new EcuException("Cannot subscribe to output channel '" + ch + "': " + e.getMessage(), e);
+            } catch (RuntimeException e) {
+                throw new EcuException("Cannot subscribe to output channel '" + ch + "': " + e, e);
             }
         }
     }
@@ -223,6 +226,22 @@ public final class TsEcuPort implements EcuPort {
                 // TunerStudio is shutting down or the configuration is gone: nothing to do
             }
         }
+    }
+
+    /** Reads channels through TunerStudio's expression evaluator: works whenever the runtime data is being read. */
+    @Override
+    public double[] pollChannels(String config, List<String> channels) {
+        double[] out = new double[channels.size()];
+        for (int i = 0; i < out.length; i++) {
+            try {
+                out[i] = access.evaluateExpression(config, channels.get(i));
+            } catch (MathException e) {
+                out[i] = Double.NaN;
+            } catch (RuntimeException e) {
+                out[i] = Double.NaN;
+            }
+        }
+        return out;
     }
 
     @Override

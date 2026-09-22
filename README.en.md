@@ -34,6 +34,15 @@ names preset. Best-effort presets exist for stock MS3 1.5+, Speeduino and rusEFI
    A rise bump that survives a deep trim gets anticipation (D up, I down) and a narrower window.
    In the simulator 170 kPa arrives about 230 rpm earlier than with the ramp.
 
+**Live values and progress.** The live row works from the moment the plugin opens: the bound
+channels are subscribed right away, and when TunerStudio's callbacks stay silent for a second the
+plugin polls the channels itself (20 Hz). The bold progress line under the plan says what is going
+on: waiting for ECU data (check the connection, Setup → *Validate* / *Read live values*), the
+sample rate and which channels are silent, and during a run the seconds, samples, pulls, peak
+boost and a hint (waiting for full throttle / in a pull, settling / learning). Every recorded pull
+and the run summary go to the Log; *Read live values* on Setup prints every bound channel's
+current value straight from TunerStudio.
+
 ## VVT and ignition modes
 
 * **VVT PID (normal driving):** a run is a minute or two of varied driving; the cam angle is

@@ -48,6 +48,12 @@ public interface EcuPort {
 
     void unsubscribe(ChannelListener listener);
 
+    /**
+     * Current values of channels read on demand, one per name (NaN when a channel cannot be read).
+     * Null when this port cannot poll (the demo streams its values).
+     */
+    double[] pollChannels(String config, List<String> channels);
+
     /** Table definitions from the INI (z, x, y parameter names), empty when unavailable. */
     List<UiTableInfo> uiTables(String config);
 

@@ -106,6 +106,53 @@ class ControllerDemoIntegrationTest {
     }
 
     @Test
+    void liveValuesFlowBeforeAnySessionAndTheProgressLineSaysSo() throws Exception {
+        SimEcuPort port = new SimEcuPort();
+        Collector listener = new Collector();
+        TuneController ctl = new TuneController(listener);
+        ctl.setPort(port);
+        EcuBinding binding = EcuPresets.create(EcuPresets.STEALTH_PCM);
+        binding.timeChannel = "seconds";
+        assertTrue(ctl.progress().contains("not started"), ctl.progress());
+        ctl.monitor(binding);
+        assertTrue(ctl.isFeedActive());
+        assertTrue(ctl.progress().startsWith("Waiting for data"), ctl.progress());
+        port.simulatePull(3, 1000);
+        waitForPull(port);
+        assertNotNull(ctl.lastSample(), "live values without a session");
+        assertTrue(listener.samples > 50, "samples " + listener.samples);
+        assertTrue(ctl.progress().contains("samples/s"), ctl.progress());
+        boolean logged = false;
+        for (String l : listener.log) {
+            logged |= l.contains("Live data from the ECU");
+        }
+        assertTrue(logged, String.join("\n", listener.log));
+        // the same binding again: no re-subscription, the feed keeps its numbers
+        int before = listener.samples;
+        ctl.monitor(binding);
+        assertTrue(ctl.isFeedActive());
+        // a session on top of the running feed records pulls and logs them
+        AutotuneConfig cfg = new AutotuneConfig();
+        cfg.autoEndRunIdleSec = 0;
+        ctl.startSession(cfg, binding);
+        ctl.writePlanToEcu();
+        ctl.startRun();
+        port.simulatePull(3, 1000);
+        waitForPull(port);
+        assertTrue(listener.samples > before);
+        assertTrue(ctl.progress().contains("Recording"), ctl.progress());
+        boolean pullLogged = false;
+        for (String l : listener.log) {
+            pullLogged |= l.contains("Pull 1 recorded");
+        }
+        assertTrue(pullLogged, String.join("\n", listener.log));
+        ctl.endRun();
+        assertTrue(ctl.progress().contains("Run analysed"), ctl.progress());
+        ctl.shutdown();
+        assertFalse(ctl.isFeedActive());
+    }
+
+    @Test
     void overboostWritesSafeStateAndAborts() throws Exception {
         SimEcuPort port = new SimEcuPort();
         Collector listener = new Collector();

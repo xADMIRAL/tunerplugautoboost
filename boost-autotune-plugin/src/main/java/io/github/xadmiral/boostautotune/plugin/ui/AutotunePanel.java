@@ -35,6 +35,7 @@ public final class AutotunePanel extends JPanel {
     private final JComboBox<TuneMode> modeCombo = new JComboBox<TuneMode>(TuneMode.values());
     private final JLabel stateLabel = new JLabel(" ");
     private final JLabel planLabel = new JLabel(" ");
+    private final JTextArea progressLabel = new JTextArea(" ");
     private final JTextArea instructions = new JTextArea(2, 60);
     private static final String[] LIVE_NAMES = {"RPM", "TPS %", "MAP kPa", "Boost tgt", "Boost duty", "CLT °C", "Gear",
             "VVT angle", "VVT target", "Advance", "Knock rtd", "AFR", "Sample", "Pulls / peak", "MAT °C", "Anti-lag", "Knock %"};
@@ -84,6 +85,13 @@ public final class AutotunePanel extends JPanel {
         stateLabel.setFont(stateLabel.getFont().deriveFont(Font.BOLD, 15f));
         top.add(stateLabel, gc);
         top.add(planLabel, gc);
+        // a wrapping line: the waiting / silent-channel hints are long and must stay readable
+        progressLabel.setEditable(false);
+        progressLabel.setLineWrap(true);
+        progressLabel.setWrapStyleWord(true);
+        progressLabel.setOpaque(false);
+        progressLabel.setFont(new JLabel().getFont().deriveFont(Font.BOLD));
+        top.add(progressLabel, gc);
         instructions.setEditable(false);
         instructions.setLineWrap(true);
         instructions.setWrapStyleWord(true);
@@ -239,6 +247,11 @@ public final class AutotunePanel extends JPanel {
         return stateLabel;
     }
 
+    /** The live feed / run progress line. */
+    public JTextArea progressLabel() {
+        return progressLabel;
+    }
+
     /** Live value labels and their cells (layout checks). */
     public JLabel[] liveLabels() {
         return live;
@@ -304,6 +317,13 @@ public final class AutotunePanel extends JPanel {
     }
 
     private void refreshLive() {
+        String progress = ctl.progress();
+        if (!progress.equals(progressLabel.getText())) {
+            progressLabel.setText(progress);
+            Color bg = Palette.panel();
+            boolean warn = progress.startsWith("Waiting") || progress.contains("silent:") || progress.contains("Aborted") || progress.contains("error");
+            progressLabel.setForeground(warn ? Palette.warnOn(bg) : Palette.text());
+        }
         Sample x = ctl.lastSample();
         SampleState st = ctl.lastSampleState();
         if (x == null) {

@@ -119,10 +119,17 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
             }
         });
         applyFontScale();
+        setup.setFeedStatus(new SetupPanel.StatusSource() {
+            public String text() {
+                return ctl.progress();
+            }
+        });
         logPanel.append("Boost Autotune ready. ECU: " + (port == null ? "none" : port.signature()));
         if (store != null) {
             logPanel.append("Settings file: " + store.file());
         }
+        // the live values flow from the moment the plugin opens: no session needed to see whether the ECU delivers
+        ctl.monitor(binding);
     }
 
     public AutotuneConfig config() {
@@ -200,6 +207,10 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
             store.save(cfg, vvtSweep, ignSweep, vvtPid, als, knock, binding, uiPrefs);
         } catch (IOException e) {
             logPanel.append("Could not save settings: " + e.getMessage());
+        }
+        // a changed binding re-subscribes the live feed (no-op while the channels are the same)
+        if (ctl != null) {
+            ctl.monitor(binding);
         }
     }
 
@@ -371,6 +382,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
 
     public void dispose() {
         ctl.abort("Plugin closed");
+        ctl.shutdown();
         autotune.dispose();
         saveSettings();
     }

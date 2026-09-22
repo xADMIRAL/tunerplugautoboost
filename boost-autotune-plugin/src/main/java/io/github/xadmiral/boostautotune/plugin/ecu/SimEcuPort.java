@@ -385,6 +385,11 @@ public final class SimEcuPort implements EcuPort {
     }
 
     @Override
+    public double[] pollChannels(String config, List<String> channels) {
+        return null; // the demo streams its values
+    }
+
+    @Override
     public List<UiTableInfo> uiTables(String config) {
         EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
         return Arrays.asList(
