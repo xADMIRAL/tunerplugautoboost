@@ -108,6 +108,19 @@ The Analysis tab shows the curve and the per-cylinder gains before / after; *Res
 puts both back. It cannot tell a bad sensor or a knocking engine from a noisy one: listen too.
 Frequency, window and integrator settings are not touched.
 
+## Table smoothing (VE)
+
+The **Smooth** tab smooths any firmware table, `veTable1` by default (the list comes from the INI
+table definitions, names can be typed). The ECU interpolates between cells, so a table left jagged
+by VE Analyze makes the mixture swing through transients; a smooth one answers the same way every
+time. *Read from ECU*, then *Preview*: every cell of the chosen region (RPM / load bounds, blank =
+all) moves *Strength* (50 %) of the way towards the weighted average of its neighbours (3x3 kernel,
+or along one axis only), *Passes* times; missing neighbours at the table edge are mirrored so edges
+do not creep; the change per cell is capped (5 %) and clamped to the INI range. The preview colours
+raised cells blue and lowered ones red and reports the count, the largest and mean change and the
+roughness before / after. *Write to ECU* keeps an undo copy for *Restore original*; burn in
+TunerStudio. Smooth a table that is already close, not one that still needs tuning.
+
 ## TunerStudio dashboards
 
 `dash/` holds three ready dashboards for the Stealth PCM (firmware signature taken from your own

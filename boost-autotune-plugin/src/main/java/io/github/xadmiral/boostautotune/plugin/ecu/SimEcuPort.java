@@ -134,6 +134,26 @@ public final class SimEcuPort implements EcuPort {
         scalars.put(b.knockHiRpmParam, 7000.0);
         scalars.put("knk_maxrtd", 6.0);
         scalars.put("knk_ndet", 2.0);
+        // fuel: the base tune's VE table (jagged where VE Analyze worked on it) for the smoothing tool
+        arrays.put("veTable1", new double[][]{
+                {53.0, 53.0, 52.6, 50.4, 50.0, 55.0, 69.0, 74.0, 75.0, 85.0, 94.0, 94.0, 90.0, 88.0, 90.0, 92.0},
+                {53.0, 53.0, 54.0, 55.0, 55.0, 60.0, 69.0, 74.0, 75.0, 85.0, 94.0, 94.0, 90.0, 88.0, 90.0, 92.0},
+                {53.0, 54.0, 55.0, 56.6, 61.2, 64.0, 69.0, 74.0, 75.0, 85.0, 94.0, 94.0, 90.0, 88.0, 90.0, 92.0},
+                {65.0, 65.0, 65.0, 61.9, 65.3, 66.4, 68.8, 73.5, 71.0, 81.1, 94.0, 94.0, 90.0, 88.0, 90.0, 92.0},
+                {75.0, 75.0, 75.0, 74.0, 71.9, 71.0, 71.5, 80.0, 75.9, 82.4, 94.0, 94.0, 90.0, 88.0, 90.0, 92.0},
+                {80.0, 80.0, 80.0, 79.3, 76.4, 74.5, 76.7, 87.3, 87.4, 88.3, 94.0, 94.0, 90.0, 88.0, 90.0, 92.0},
+                {90.0, 90.0, 90.0, 86.0, 81.5, 78.7, 88.6, 91.1, 93.2, 91.3, 94.0, 94.0, 90.0, 88.0, 90.0, 92.0},
+                {90.0, 90.0, 90.0, 90.0, 90.0, 85.1, 93.2, 89.4, 90.3, 93.0, 94.0, 94.0, 91.0, 89.1, 90.0, 92.0},
+                {90.0, 90.0, 90.0, 90.0, 90.0, 90.0, 94.2, 92.3, 90.5, 94.1, 96.4, 94.6, 92.0, 90.1, 90.0, 92.0},
+                {90.0, 90.0, 90.0, 90.0, 90.0, 90.0, 93.4, 92.9, 91.9, 96.0, 98.2, 96.0, 93.0, 91.2, 91.3, 92.0},
+                {90.0, 90.0, 90.0, 90.0, 90.0, 90.0, 94.1, 93.1, 95.0, 96.0, 97.0, 94.6, 93.0, 91.5, 92.9, 92.0},
+                {90.0, 90.0, 90.0, 90.0, 90.0, 90.0, 93.8, 92.6, 93.9, 96.0, 97.0, 95.0, 93.0, 91.0, 92.5, 92.0},
+                {90.0, 90.0, 90.0, 90.0, 90.0, 90.0, 93.5, 92.0, 94.0, 96.0, 97.0, 95.0, 93.0, 91.0, 93.5, 92.0},
+                {90.0, 90.0, 90.0, 90.0, 90.0, 90.0, 93.3, 92.4, 94.1, 96.0, 97.0, 95.0, 93.0, 91.0, 93.5, 92.0},
+                {90.0, 90.0, 90.0, 90.0, 90.0, 90.0, 93.0, 93.0, 95.4, 96.0, 97.0, 95.0, 93.0, 91.0, 93.5, 92.0},
+                {90.0, 90.0, 90.0, 90.0, 90.0, 90.0, 93.0, 93.0, 96.7, 96.0, 97.0, 95.0, 93.0, 91.0, 93.5, 92.0}});
+        arrays.put("frpm_table1", column(400, 500, 800, 1200, 1600, 2200, 2800, 3400, 4000, 4600, 5200, 5800, 6200, 6600, 7000, 7400));
+        arrays.put("fmap_table1", column(25, 30, 40, 50, 60, 80, 100, 120, 140, 160, 180, 190, 200, 210, 220, 230));
         applyAuxiliaries();
         sim = new PullSimulator(plant, ecu);
     }
@@ -253,7 +273,8 @@ public final class SimEcuPort implements EcuPort {
             double[][] a = arrays.get(name);
             double min = name.startsWith("advance") || name.equals("als_timing") ? -50 : 0;
             double max = name.contains("targets") ? 400 : name.startsWith("advance") ? 90 : name.startsWith("vvt_timing1") ? 720
-                    : name.equals("als_timing") ? 50 : name.endsWith("_rpms") ? 25000 : 100;
+                    : name.equals("als_timing") ? 50 : name.endsWith("_rpms") || name.startsWith("frpm") ? 25000
+                    : name.startsWith("fmap") ? 400 : name.startsWith("veTable") ? 255 : 100;
             return new ParamInfo("array", "", min, max, 1, a[0].length, a.length, Collections.<String>emptyList());
         }
         if (scalars.containsKey(name)) {
@@ -398,7 +419,8 @@ public final class SimEcuPort implements EcuPort {
                 new UiTableInfo("Boost Control Duty 1", b.openLoopXBins, b.openLoopYBins, b.openLoopTable, "rpm", "throttle"),
                 new UiTableInfo("VVT Intake (Relative Timing)", b.vvtXBins, b.vvtYBins, b.vvtTable, "rpm", "vvt_load"),
                 new UiTableInfo("Ignition Table 1 (Spark Advance)", b.sparkXBins, b.sparkYBins, b.sparkTable, "rpm", "ignload"),
-                new UiTableInfo("Anti-Lag Timing", b.alsXBins, b.alsYBins, b.alsTimingTable, "rpm", "tps"));
+                new UiTableInfo("Anti-Lag Timing", b.alsXBins, b.alsYBins, b.alsTimingTable, "rpm", "tps"),
+                new UiTableInfo("Fuel VE Table 1", "frpm_table1", "fmap_table1", "veTable1", "rpm", "fuelload"));
     }
 
     public boolean isPulling() {

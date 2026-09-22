@@ -238,6 +238,25 @@ Launch/Flatshift` + `launchlimopt = Spark Cut`, `OvrRunC = Off` (отсечка 
 ставит пороги туда, где шум, — слушайте мотор сами и калибруйте на карте, которой доверяете.
 Частота (`knock_bpass`), окно (`knock_starts` / `knock_durations`) и интегратор не трогаются.
 
+## Сглаживание таблиц (VE)
+
+Вкладка **Smooth** сглаживает любую таблицу прошивки, по умолчанию `veTable1` (оси `frpm_table1` /
+`fmap_table1`); список берётся из определений INI, можно вписать имена вручную. ECU интерполирует
+между ячейками, поэтому «рваная» после VE Analyze таблица даёт качели смеси на переходах, а гладкая
+отвечает одинаково каждый раз.
+
+Как работает: *Read from ECU* читает таблицу и показывает её; *Preview* строит сглаженную: каждая
+ячейка выбранной области сдвигается на *Strength* (по умолчанию 50 %) к взвешенному среднему соседей
+(ядро 3×3: соседи по осям с весом 2, по диагонали 1; или только вдоль оборотов / только вдоль
+нагрузки), *Passes* раз; пики опускаются, ямы заполняются, край таблицы не «сползает» (недостающие
+соседи зеркалятся). Изменение одной ячейки ограничено *Max change per cell* (5 %), значения
+зажимаются в диапазон таблицы из INI. Область задаётся по значениям осей (RPM from/to, Load
+from/to; пусто = вся таблица), ячейки вне области не меняются, но участвуют как граница. Предпросмотр
+раскрашен: синее поднято, красное опущено, серое вне области; под ним статистика (сколько ячеек,
+максимум и среднее изменение, «шероховатость» до/после). *Write to ECU* пишет в RAM с копией для
+*Restore original*; Burn в TunerStudio. Сглаживать имеет смысл таблицу, которая уже близка к
+правильной; VE с грубыми ошибками сначала настраивается по логам.
+
 ## Дашборды TunerStudio
 
 В папке `dash/` три готовых дашборда для Stealth PCM (подпись прошивки берётся из вашего файла,
@@ -372,7 +391,7 @@ boost-autotune-core/    чистая логика без зависимосте�
   config/               AutotuneConfig — все настройки
   learn/                фильтр точек, сегментация заездов, PlantModel, BiasTableBuilder,
                         TargetTableBuilder, StepResponseAnalyzer, PidTuner, DutyLadder, TargetTrimmer,
-                        TorqueProxy (dRPM/dt по бинам оборотов)
+                        TorqueProxy (dRPM/dt по бинам оборотов), TableSmoother (сглаживание таблиц)
   sweep/                SweepSession — перебор смещений для VVT/зажигания, KnockGuard, правило MBT
   vvt/                  VvtTrackingAnalyzer + VvtPidSession — оценка слежения и подстройка PID VVT
   als/                  AlsSession — автотюн антилага (таблица als_timing + воздух РХХ, защиты MAT/stall)
@@ -385,7 +404,7 @@ boost-autotune-plugin/  Swing UI и связка с TunerStudio
                         EcuBinding + EcuPresets, EcuAdapter (ориентация таблиц, чтение/запись), LiveFeed
   mode/                 ModeDriver: BoostDriver / SweepDriver / VvtPidDriver / AntilagDriver / KnockCalDriver — режимы поверх ECU,
                         AntilagPresets — пресеты дрифта (ALS / flat shift / over-run)
-  ui/                   Autotune / Boost / VVT / Ignition / Anti-lag / Knock / Setup / Analysis / Log
+  ui/                   Autotune / Boost / VVT / Ignition / Anti-lag / Knock / Smooth / Setup / Analysis / Log
   BoostAutotunePlugin   точка входа (манифест: ApplicationPlugin)
   DemoLauncher          запуск UI с симулятором
 repo/                   вендоренный TunerStudioPluginAPI.jar (только для компиляции)

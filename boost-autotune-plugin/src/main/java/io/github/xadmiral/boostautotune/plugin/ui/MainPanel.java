@@ -41,6 +41,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
     private final IgnitionPanel ignitionPanel;
     private final AntilagPanel antilagPanel;
     private final KnockPanel knockPanel;
+    private final SmoothPanel smoothPanel;
     private final AutotunePanel autotune;
     private final AnalysisPanel analysis;
     private final LogPanel logPanel = new LogPanel();
@@ -87,6 +88,11 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
             }
         });
         knockPanel = new KnockPanel(knock, save);
+        smoothPanel = new SmoothPanel(binding, port, new SmoothPanel.Log() {
+            public void line(String s) {
+                logPanel.append(s);
+            }
+        });
         autotune = new AutotunePanel(ctl, new Runnable() {
             public void run() {
                 startSession();
@@ -99,6 +105,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         tabs.addTab("Ignition", ignitionPanel);
         tabs.addTab("Anti-lag", antilagPanel);
         tabs.addTab("Knock", knockPanel);
+        tabs.addTab("Smooth", smoothPanel);
         tabs.addTab("Setup", setup);
         tabs.addTab("Analysis", analysis);
         tabs.addTab("Log", logPanel);
@@ -162,6 +169,10 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
 
     public KnockPanel knockPanel() {
         return knockPanel;
+    }
+
+    public SmoothPanel smoothPanel() {
+        return smoothPanel;
     }
 
     public TargetsPanel targetsPanel() {
