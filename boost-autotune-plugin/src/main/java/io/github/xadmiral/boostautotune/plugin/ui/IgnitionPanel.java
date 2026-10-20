@@ -35,8 +35,8 @@ public final class IgnitionPanel extends JPanel {
         JTextArea intro = new JTextArea(
                 "Ignition advance sweep: the WOT rows of the spark table get small offsets (e.g. -2, 0, +2, +4 deg), one per run, "
                         + "and engine acceleration per RPM bin decides. The MBT rule keeps the LEAST advance that gives the best torque.\n"
-                        + "Guards: any knock retard reported by the ECU caps that cell below the advance that knocked; heavy knock or a lean "
-                        + "mixture at WOT aborts the session and restores the original table; no cell is ever advanced more than the session "
+                        + "Guards: any knock retard reported by the ECU caps that cell below the advance that knocked; heavy knock aborts the session and restores the original table "
+                        + "(a lean-mixture abort is optional: fill in Max AFR at WOT to use it); no cell is ever advanced more than the session "
                         + "limit over its original value. This is not a substitute for a dyno and a knock ear. Start with a table you trust.");
         intro.setEditable(false);
         intro.setLineWrap(true);

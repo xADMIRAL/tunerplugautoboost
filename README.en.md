@@ -54,7 +54,8 @@ current value straight from TunerStudio.
 * **Ignition advance sweep with knock guard (pulls):** offsets (`0, -2, +2, +4` deg, two passes)
   on the WOT rows of the spark table, decided by the MBT rule (least advance within 0.5 % of the
   best torque). Any ECU knock retard caps the cell below the advance that knocked; heavy knock
-  (>= 3 deg retard) or a lean WOT mixture aborts and restores the original table; no cell is ever
+  (>= 3 deg retard) aborts and restores the original table (the lean-mixture abort is optional
+  and off by default; no mode needs the AFR to be right); no cell is ever
   advanced more than +4 deg over its original value. Not a dyno; needs working knock control and a
   wideband.
 

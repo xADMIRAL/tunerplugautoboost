@@ -72,7 +72,7 @@ class MainPanelHeadlessTest {
         io.github.xadmiral.boostautotune.core.sweep.SweepConfig ign = io.github.xadmiral.boostautotune.core.sweep.SweepConfig.ignitionDefaults();
         SettingsStore.sweepFrom(ign, raw, "ignsweep.");
         assertEquals(3, ign.maxAdvanceOverOriginalDeg, 1e-9);
-        assertEquals(13.0, ign.maxWotAfr, 1e-9);
+        assertTrue(Double.isNaN(ign.maxWotAfr), "no AFR gate unless the user sets one");
         SwingUtilities.invokeAndWait(new Runnable() {
             public void run() {
                 holder[0].dispose();

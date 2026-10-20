@@ -55,8 +55,10 @@ public final class SweepDriver implements ModeDriver {
                 kind.label(), c.candidateOffsets, c.passes, c.minLoad, c.minRpm, c.maxRpm, c.gear > 0 ? ", gear " + c.gear : ""));
         if (kind == SweepKind.IGNITION) {
             startupLog.add(String.format(Locale.US,
-                    "Ignition guards: knock retard >= %.1f deg caps the cell, >= %.1f deg aborts, AFR > %.1f at WOT aborts, never more than +%.1f deg over the original",
-                    c.knockRetardTriggerDeg, c.knockAbortRetardDeg, c.maxWotAfr, c.maxAdvanceOverOriginalDeg));
+                    "Ignition guards: knock retard >= %.1f deg caps the cell, >= %.1f deg aborts, %s, never more than +%.1f deg over the original",
+                    c.knockRetardTriggerDeg, c.knockAbortRetardDeg,
+                    Double.isNaN(c.maxWotAfr) ? "no AFR limit" : String.format(Locale.US, "AFR > %.1f at WOT aborts", c.maxWotAfr),
+                    c.maxAdvanceOverOriginalDeg));
         }
         startupLog.add("First plan: " + plan.title());
     }

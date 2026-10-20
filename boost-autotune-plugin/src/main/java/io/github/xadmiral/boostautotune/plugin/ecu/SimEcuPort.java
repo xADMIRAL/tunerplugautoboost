@@ -285,15 +285,19 @@ public final class SimEcuPort implements EcuPort {
             return new ParamInfo("scalar", "", min, max, name.equals("als_iac_steps") ? 0 : 1, 1, 1, Collections.<String>emptyList());
         }
         if (options.containsKey(name)) {
+            // the option lists of the real INI for the switches the plugin writes; plain Off / On otherwise
             List<String> opts = name.equals("als_in_pin") ? Arrays.asList("Off", "Always ON")
                     : name.equals("launch_opt_on") ? Arrays.asList("Off", "Launch", "Launch/Flatshift")
+                    : name.equals("launchlimopt") ? Arrays.asList("Spark Cut", "Fuel Cut", "Spark & Fuel Cut")
                     : name.equals("IdleCtl") ? Arrays.asList("None", "PWM valve (2 or 3 wire)", "Stepper valve (6 wire)")
+                    : name.equals("boost_ctl_settings_cl") ? Arrays.asList("Open-loop", "Closed-loop")
+                    : name.equals("boost_ctl_flags") ? Arrays.asList("Basic Mode", "Advanced Mode")
                     : name.startsWith("knock_gain") ? Arrays.asList(KNOCK_GAIN)
                     : name.equals("nCylinders") ? Arrays.asList("INVALID", "1", "2", "3", "4", "5", "6", "7", "8")
                     : name.equals("knk_option") ? Arrays.asList("Disabled", "Safe Mode", "Aggressive Mode")
                     : name.equals("knk_option_an") ? Arrays.asList("Analogue", "Internal")
                     : name.equals("knock_conf_num") ? Arrays.asList("1", "2")
-                    : Arrays.asList("Off", "On", "Open-loop", "Closed-loop");
+                    : Arrays.asList("Off", "On");
             return new ParamInfo("bits", "", 0, 0, 0, 1, 1, opts);
         }
         throw new EcuException("Unknown parameter " + name);

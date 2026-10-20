@@ -60,7 +60,7 @@ public final class KnockCalDriver implements ModeDriver {
         }
         String control = adapter.readKnockControl();
         if (control != null && adapter.binding().has(adapter.binding().knockControlOffOption)
-                && adapter.binding().knockControlOffOption.equalsIgnoreCase(control.trim())) {
+                && io.github.xadmiral.boostautotune.plugin.ecu.OptionMatcher.same(control, adapter.binding().knockControlOffOption)) {
             startupLog.add("WARNING: knock control is disabled in the ECU (" + adapter.binding().knockControlParam + " = " + control
                     + "): the curve and gains are calibrated all the same, but no knock retard can show up until it is enabled.");
         }

@@ -47,7 +47,8 @@ public final class SweepConfig {
     /** Ignition: cells that knocked are capped this far below the advance that knocked. */
     public double knockCapMarginDeg = 2.0;
     /** Ignition: abort when AFR at WOT is leaner than this (NaN disables the guard). */
-    public double maxWotAfr = 13.0;
+    /** Lean-out guard for the ignition sweep: abort when the AFR at WOT is leaner than this; NaN = off (default). */
+    public double maxWotAfr = Double.NaN;
     /** Ignition: never advance a cell more than this above its original value in one session. */
     public double maxAdvanceOverOriginalDeg = 4.0;
     /** Safety abort (same as the boost tuner). */

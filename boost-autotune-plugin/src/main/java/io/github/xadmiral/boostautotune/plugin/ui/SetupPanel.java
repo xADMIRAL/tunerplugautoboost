@@ -409,7 +409,12 @@ public final class SetupPanel extends JPanel {
             default:
                 problems = binding.validate(ch, pa);
         }
+        List<String> adopted = new ArrayList<String>();
+        problems.addAll(checkOptions(adopted));
         StringBuilder sb = new StringBuilder();
+        for (String a : adopted) {
+            sb.append(a).append('\n');
+        }
         if (problems.isEmpty()) {
             sb.append("Binding OK for ").append(mode.label()).append(".\n");
             if (!binding.hasBiasTable()) {
@@ -426,6 +431,63 @@ public final class SetupPanel extends JPanel {
         }
         say(sb.toString());
         model.fireTableDataChanged();
+        return problems;
+    }
+
+    /** Parameter / option-text pairs of the binding (property key of the text). */
+    private static final String[][] OPTION_PAIRS = {
+            {"enableParam", "enableOption", "Boost control enable option"},
+            {"modeParam", "openLoopOption", "Open-loop option"},
+            {"modeParam", "closedLoopOption", "Closed-loop option"},
+            {"closedLoopExtraParam", "closedLoopExtraOption", "Extra closed-loop option"},
+            {"idleTypeParam", "idleTypeStepperOption", "Idle valve stepper option"},
+            {"alsEnableParam", "alsDisableOption", "Anti-lag OFF option"},
+            {"dbwEnableParam", "dbwEnableOption", "Drive-by-wire ON option"},
+            {"knockPerCylParam", "knockPerCylOnOption", "Knock per-cylinder ON option"},
+            {"knockControlParam", "knockControlOffOption", "Knock control DISABLED option"},
+    };
+
+    /**
+     * Every option text must be one the ECU definition lists: a text that only differs in wording
+     * ("On" where the INI says "Enabled") is adopted from the INI, anything else is a problem.
+     */
+    public List<String> checkOptions(List<String> adopted) {
+        List<String> problems = new ArrayList<String>();
+        if (port == null) {
+            return problems;
+        }
+        String cfg = currentConfig();
+        boolean changed = false;
+        for (String[] pair : OPTION_PAIRS) {
+            String param = props.getProperty(pair[0], "").trim();
+            String text = props.getProperty(pair[1], "").trim();
+            if (param.isEmpty() || text.isEmpty() || !params.contains(param)) {
+                continue;
+            }
+            List<String> options;
+            try {
+                EcuPort.ParamInfo info = port.parameterInfo(cfg, param);
+                options = info == null ? null : info.options;
+            } catch (EcuException e) {
+                continue;
+            }
+            if (options == null || options.isEmpty()) {
+                continue;
+            }
+            String m = io.github.xadmiral.boostautotune.plugin.ecu.OptionMatcher.match(options, text);
+            if (m == null) {
+                problems.add(pair[2] + ": '" + text + "' is not an option of " + param + " " + options);
+            } else if (!m.equals(text)) {
+                props.setProperty(pair[1], m);
+                adopted.add(pair[2] + ": '" + text + "' is spelled '" + m + "' in this INI, adopted");
+                changed = true;
+            }
+        }
+        if (changed) {
+            binding.load(props, "");
+            model.fireTableDataChanged();
+            onChanged.run();
+        }
         return problems;
     }
 

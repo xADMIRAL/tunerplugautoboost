@@ -94,7 +94,7 @@ public final class EcuAdapter {
         }
         if (b.hasModeSwitch()) {
             String mode = port.readOption(cfg, b.modeParam);
-            s.closedLoop = b.closedLoopOption.equalsIgnoreCase(mode == null ? "" : mode.trim());
+            s.closedLoop = OptionMatcher.same(mode, b.closedLoopOption);
         } else {
             s.closedLoop = true;
         }
@@ -155,15 +155,13 @@ public final class EcuAdapter {
             done.add(b.closedLoopWindowParam + " = " + s.closedLoopWindowKpa);
         }
         if (b.has(b.enableParam) && b.has(b.enableOption)) {
-            port.writeOption(cfg, b.enableParam, b.enableOption);
+            done.add(b.enableParam + " = " + writeOptionResolved(cfg, b.enableParam, b.enableOption));
         }
         if (b.hasModeSwitch()) {
-            port.writeOption(cfg, b.modeParam, s.closedLoop ? b.closedLoopOption : b.openLoopOption);
-            done.add(b.modeParam + " = " + (s.closedLoop ? b.closedLoopOption : b.openLoopOption));
+            done.add(b.modeParam + " = " + writeOptionResolved(cfg, b.modeParam, s.closedLoop ? b.closedLoopOption : b.openLoopOption));
         }
         if (s.closedLoop && b.has(b.closedLoopExtraParam) && b.has(b.closedLoopExtraOption)) {
-            port.writeOption(cfg, b.closedLoopExtraParam, b.closedLoopExtraOption);
-            done.add(b.closedLoopExtraParam + " = " + b.closedLoopExtraOption);
+            done.add(b.closedLoopExtraParam + " = " + writeOptionResolved(cfg, b.closedLoopExtraParam, b.closedLoopExtraOption));
         }
         return done;
     }
@@ -173,8 +171,7 @@ public final class EcuAdapter {
         String cfg = config();
         List<String> done = new ArrayList<String>();
         if (b.hasModeSwitch()) {
-            port.writeOption(cfg, b.modeParam, b.openLoopOption);
-            done.add(b.modeParam + " = " + b.openLoopOption);
+            done.add(b.modeParam + " = " + writeOptionResolved(cfg, b.modeParam, b.openLoopOption));
         }
         if (s.openLoopTable != null && b.hasOpenLoopTable()) {
             Grid safe = s.openLoopTable.copy();
@@ -191,6 +188,31 @@ public final class EcuAdapter {
 
     public void burn() throws EcuException {
         port.burn(config());
+    }
+
+    /**
+     * The option text this ECU's definition uses for what the binding asks ("On" may be "Enabled"
+     * here). Passes the text through when the definition lists no options; refuses with the list
+     * when nothing in it means the same.
+     */
+    public String resolveOption(String cfg, String param, String wanted) throws EcuException {
+        EcuPort.ParamInfo info = port.parameterInfo(cfg, param);
+        if (info == null || info.options == null || info.options.isEmpty()) {
+            return wanted;
+        }
+        String m = OptionMatcher.match(info.options, wanted);
+        if (m == null) {
+            throw new EcuException(param + ": option '" + wanted + "' is not one of " + info.options
+                    + " - put one of these texts into the Setup tab");
+        }
+        return m;
+    }
+
+    /** Writes a bit parameter with the resolved option text; returns the text written. */
+    public String writeOptionResolved(String cfg, String param, String wanted) throws EcuException {
+        String m = resolveOption(cfg, param, wanted);
+        port.writeOption(cfg, param, m);
+        return m;
     }
 
     // ---- VVT ----------------------------------------------------------------------------------
@@ -265,7 +287,7 @@ public final class EcuAdapter {
         }
         try {
             String v = port.readOption(config(), b.dbwEnableParam);
-            return v != null && v.trim().equalsIgnoreCase(b.dbwEnableOption.trim());
+            return OptionMatcher.same(v, b.dbwEnableOption);
         } catch (EcuException e) {
             return false;
         }
@@ -294,7 +316,7 @@ public final class EcuAdapter {
         if (b.has(b.idleTypeParam) && b.has(b.idleTypeStepperOption) && b.has(b.alsAirStepsParam) && b.has(b.alsAirDutyParam)) {
             try {
                 String type = port.readOption(config(), b.idleTypeParam);
-                stepper = type != null && type.trim().equalsIgnoreCase(b.idleTypeStepperOption.trim());
+                stepper = OptionMatcher.same(type, b.idleTypeStepperOption);
             } catch (EcuException e) {
                 stepper = true;
             }
@@ -345,7 +367,7 @@ public final class EcuAdapter {
 
     public void writeAlsEnable(String option) throws EcuException {
         if (b.has(b.alsEnableParam) && option != null) {
-            port.writeOption(config(), b.alsEnableParam, option);
+            writeOptionResolved(config(), b.alsEnableParam, option);
         }
     }
 
@@ -391,7 +413,7 @@ public final class EcuAdapter {
         }
         try {
             String v = port.readOption(config(), b.knockPerCylParam);
-            return v != null && v.trim().equalsIgnoreCase(b.knockPerCylOnOption.trim());
+            return OptionMatcher.same(v, b.knockPerCylOnOption);
         } catch (EcuException e) {
             return false;
         }
@@ -563,7 +585,7 @@ public final class EcuAdapter {
         EcuPort.ParamInfo info = port.parameterInfo(cfg, name);
         String v = value == null ? "" : value.trim();
         if ("bits".equalsIgnoreCase(info.paramClass)) {
-            port.writeOption(cfg, name, v);
+            writeOptionResolved(cfg, name, v);
             return;
         }
         if ("array".equalsIgnoreCase(info.paramClass)) {

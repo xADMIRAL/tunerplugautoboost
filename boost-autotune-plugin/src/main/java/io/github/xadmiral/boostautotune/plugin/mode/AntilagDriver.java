@@ -58,7 +58,7 @@ public final class AntilagDriver implements ModeDriver {
         originalMaxTime = adapter.readAlsMaxTime();
         originalMinRpm = adapter.readAlsMinRpm();
         originalEnable = adapter.readAlsEnable();
-        if (originalEnable != null && adapter.binding().alsDisableOption.equalsIgnoreCase(originalEnable.trim())) {
+        if (originalEnable != null && io.github.xadmiral.boostautotune.plugin.ecu.OptionMatcher.same(originalEnable, adapter.binding().alsDisableOption)) {
             startupLog.add("WARNING: the anti-lag is switched off in the ECU (" + adapter.binding().alsEnableParam + " = "
                     + originalEnable + "). Write a drift preset first, otherwise no ALS events will happen.");
         }
