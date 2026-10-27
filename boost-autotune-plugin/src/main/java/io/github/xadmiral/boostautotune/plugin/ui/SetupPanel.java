@@ -476,10 +476,12 @@ public final class SetupPanel extends JPanel {
             }
             String m = io.github.xadmiral.boostautotune.plugin.ecu.OptionMatcher.match(options, text);
             if (m == null) {
-                problems.add(pair[2] + ": '" + text + "' is not an option of " + param + " " + options);
-            } else if (!m.equals(text)) {
-                props.setProperty(pair[1], m);
-                adopted.add(pair[2] + ": '" + text + "' is spelled '" + m + "' in this INI, adopted");
+                problems.add(pair[2] + ": '" + text + "' is not an option of " + param + " " + plainList(options));
+            } else if (!io.github.xadmiral.boostautotune.plugin.ecu.OptionMatcher.plain(m).equalsIgnoreCase(text)) {
+                // only a real difference in wording is adopted; TunerStudio's quotes are not one
+                String adopt = io.github.xadmiral.boostautotune.plugin.ecu.OptionMatcher.plain(m);
+                props.setProperty(pair[1], adopt);
+                adopted.add(pair[2] + ": '" + text + "' is spelled '" + adopt + "' in this INI, adopted");
                 changed = true;
             }
         }
@@ -489,6 +491,22 @@ public final class SetupPanel extends JPanel {
             onChanged.run();
         }
         return problems;
+    }
+
+    /** The option list without quotes and without the INVALID placeholders, for messages. */
+    private static String plainList(List<String> options) {
+        StringBuilder sb = new StringBuilder("[");
+        for (String o : options) {
+            String p = io.github.xadmiral.boostautotune.plugin.ecu.OptionMatcher.plain(o);
+            if (p.equalsIgnoreCase("INVALID")) {
+                continue;
+            }
+            if (sb.length() > 1) {
+                sb.append(", ");
+            }
+            sb.append(p);
+        }
+        return sb.append(']').toString();
     }
 
     private void previewTables() {

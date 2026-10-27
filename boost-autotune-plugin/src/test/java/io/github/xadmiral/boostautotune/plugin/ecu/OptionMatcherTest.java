@@ -25,6 +25,19 @@ class OptionMatcherTest {
     }
 
     @Test
+    void quotesFromTunerStudioAreIgnoredWhenComparingAndKeptInTheAnswer() {
+        assertEquals("\"On\"", OptionMatcher.match(Arrays.asList("\"Off\"", "\"On\""), "On"));
+        assertEquals("\"Closed-loop\"", OptionMatcher.match(Arrays.asList("\"Open-loop\"", "\"Closed-loop\""), "closed-loop"));
+        assertEquals("\"Advanced Mode\"", OptionMatcher.match(Arrays.asList("\"INVALID\"", "\"Setup Mode\"", "\"Basic Mode\"", "\"Advanced Mode\""), "Advanced Mode"));
+        assertEquals("\"Enabled\"", OptionMatcher.match(Arrays.asList("\"Disabled\"", "\"Enabled\""), "On"));
+        assertEquals("On", OptionMatcher.plain("\"On\""));
+        assertEquals("On", OptionMatcher.plain("  'On' "));
+        assertTrue(OptionMatcher.same("\"On\"", "On"));
+        assertTrue(OptionMatcher.same("\"Stepper valve (6 wire)\"", "Stepper valve (6 wire)"));
+        assertEquals(0, OptionMatcher.meaning("\"Off\""));
+    }
+
+    @Test
     void sameComparesByMeaning() {
         assertTrue(OptionMatcher.same("Enabled", "On"));
         assertTrue(OptionMatcher.same("off", "Disabled"));

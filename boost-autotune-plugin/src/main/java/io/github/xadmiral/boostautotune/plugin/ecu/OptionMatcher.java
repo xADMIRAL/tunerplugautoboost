@@ -8,6 +8,8 @@ import java.util.Locale;
  * their switches differently ("On" / "Enabled" / "Вкл"), and TunerStudio refuses a text that is
  * not literally in the list; so an option is matched exactly first, then ignoring case, then by
  * meaning (on / off synonyms), and for a two-way switch as "the other one" of a known pair.
+ * TunerStudio hands the options over with their INI quotes ("On"): they are ignored when
+ * comparing and kept in what is returned, because that is the text TunerStudio accepts back.
  */
 public final class OptionMatcher {
     private static final String[] ON = {"on", "enabled", "enable", "yes", "true", "active", "вкл", "включено", "включен", "включить", "да"};
@@ -16,8 +18,20 @@ public final class OptionMatcher {
     private OptionMatcher() {
     }
 
+    /** The option text without the quotes TunerStudio keeps around it ("On" -> On), trimmed. */
+    public static String plain(String s) {
+        if (s == null) {
+            return "";
+        }
+        String t = s.trim();
+        if (t.length() >= 2 && ((t.startsWith("\"") && t.endsWith("\"")) || (t.startsWith("'") && t.endsWith("'")))) {
+            t = t.substring(1, t.length() - 1).trim();
+        }
+        return t;
+    }
+
     private static String norm(String s) {
-        return s == null ? "" : s.trim().toLowerCase(Locale.ROOT).replace('ё', 'е');
+        return plain(s).toLowerCase(Locale.ROOT).replace('ё', 'е');
     }
 
     /** 1 = means "on", 0 = means "off", -1 = neither. */
@@ -53,9 +67,9 @@ public final class OptionMatcher {
         if (options == null || options.isEmpty() || wanted == null) {
             return null;
         }
-        String w = wanted.trim();
+        String w = plain(wanted);
         for (String o : options) {
-            if (o != null && o.equals(w)) {
+            if (o != null && plain(o).equals(w)) {
                 return o;
             }
         }

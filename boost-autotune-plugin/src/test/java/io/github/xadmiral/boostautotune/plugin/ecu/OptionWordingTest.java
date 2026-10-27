@@ -36,9 +36,12 @@ class OptionWordingTest {
         public double[] readArray1D(String c, String n) throws EcuException { return d.readArray1D(c, n); }
         public double[][] readArray2D(String c, String n) throws EcuException { return d.readArray2D(c, n); }
         public void writeScalar(String c, String n, double v) throws EcuException { d.writeScalar(c, n, v); }
+        boolean acceptPlainOnly;
+
         public void writeOption(String c, String n, String o) throws EcuException {
             if (n.equals(param)) {
-                if (!options.contains(o)) {
+                boolean ok = acceptPlainOnly ? options.contains("\"" + o + "\"") : options.contains(o);
+                if (!ok) {
                     throw new EcuException("No options found for Bit EcuParameter:" + n + " equal to the proposed " + o);
                 }
                 written = o;
@@ -70,6 +73,59 @@ class OptionWordingTest {
         a.writeAny(b.enableParam, "Off");
         assertEquals("Disabled", port.written);
         assertEquals("Disabled", a.readAny(b.enableParam));
+    }
+
+    @Test
+    void quotedOptionsAreWrittenQuotedAndValidateDoesNotComplain() throws Exception {
+        EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
+        Worded port = new Worded(b.enableParam, Arrays.asList("\"Off\"", "\"On\""));
+        EcuAdapter a = new EcuAdapter(port, b);
+        EcuState s = a.read(new ArrayList<String>());
+        a.write(s, false, false, false);
+        assertEquals("\"On\"", port.written, "TunerStudio keeps the INI quotes: the write must carry them");
+        assertEquals("On", a.readAny(b.enableParam), "shown without the quotes");
+        a.writeAny(b.enableParam, "Off");
+        assertEquals("\"Off\"", port.written);
+        // Setup -> Validate: quotes are not a wording difference, nothing is adopted or flagged
+        final List<String> adopted = new ArrayList<String>();
+        final List<String>[] problems = new List[1];
+        javax.swing.SwingUtilities.invokeAndWait(new Runnable() {
+            public void run() {
+                io.github.xadmiral.boostautotune.plugin.ui.SetupPanel sp = new io.github.xadmiral.boostautotune.plugin.ui.SetupPanel(
+                        EcuPresets.create(EcuPresets.STEALTH_PCM), port, new Runnable() { public void run() { } });
+                problems[0] = sp.checkOptions(adopted);
+            }
+        });
+        assertTrue(problems[0].isEmpty(), problems[0].toString());
+        assertTrue(adopted.isEmpty(), adopted.toString());
+    }
+
+    @Test
+    void aWordingDifferenceIsAdoptedByValidate() throws Exception {
+        final Worded port = new Worded("boost_ctl_settings_on", Arrays.asList("\"Disabled\"", "\"Enabled\""));
+        final List<String> adopted = new ArrayList<String>();
+        final EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
+        final List<String>[] problems = new List[1];
+        javax.swing.SwingUtilities.invokeAndWait(new Runnable() {
+            public void run() {
+                io.github.xadmiral.boostautotune.plugin.ui.SetupPanel sp = new io.github.xadmiral.boostautotune.plugin.ui.SetupPanel(b, port, new Runnable() { public void run() { } });
+                problems[0] = sp.checkOptions(adopted);
+            }
+        });
+        assertTrue(problems[0].isEmpty(), problems[0].toString());
+        assertEquals(1, adopted.size(), adopted.toString());
+        assertEquals("Enabled", b.enableOption);
+    }
+
+    @Test
+    void fallsBackToTheUnquotedTextWhenTheQuotedOneIsRefused() throws Exception {
+        EcuBinding b = EcuPresets.create(EcuPresets.STEALTH_PCM);
+        Worded port = new Worded(b.enableParam, Arrays.asList("\"Off\"", "\"On\""));
+        port.acceptPlainOnly = true;
+        EcuAdapter a = new EcuAdapter(port, b);
+        EcuState s = a.read(new ArrayList<String>());
+        a.write(s, false, false, false);
+        assertEquals("On", port.written);
     }
 
     @Test

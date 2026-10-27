@@ -208,11 +208,28 @@ public final class EcuAdapter {
         return m;
     }
 
-    /** Writes a bit parameter with the resolved option text; returns the text written. */
+    /**
+     * Writes a bit parameter with the resolved option text, as the ECU definition spells it
+     * (quotes included when TunerStudio lists it that way); falls back to the unquoted text when
+     * the quoted one is refused. Returns the text written.
+     */
     public String writeOptionResolved(String cfg, String param, String wanted) throws EcuException {
         String m = resolveOption(cfg, param, wanted);
-        port.writeOption(cfg, param, m);
-        return m;
+        try {
+            port.writeOption(cfg, param, m);
+            return m;
+        } catch (EcuException e) {
+            String alt = OptionMatcher.plain(m);
+            if (alt.equals(m)) {
+                throw e;
+            }
+            try {
+                port.writeOption(cfg, param, alt);
+                return alt;
+            } catch (EcuException e2) {
+                throw e;
+            }
+        }
     }
 
     // ---- VVT ----------------------------------------------------------------------------------
@@ -398,7 +415,7 @@ public final class EcuAdapter {
             EcuPort.ParamInfo info = port.parameterInfo(config(), b.cylindersParam);
             String v = "bits".equalsIgnoreCase(info.paramClass) ? port.readOption(config(), b.cylindersParam)
                     : Long.toString(Math.round(port.readScalar(config(), b.cylindersParam)));
-            return v == null ? 0 : Integer.parseInt(v.trim());
+            return v == null ? 0 : Integer.parseInt(OptionMatcher.plain(v));
         } catch (EcuException e) {
             return 0;
         } catch (NumberFormatException e) {
@@ -455,7 +472,7 @@ public final class EcuAdapter {
         List<Double> vals = new ArrayList<Double>();
         for (String o : info.options) {
             try {
-                vals.add(Double.parseDouble(o.trim()));
+                vals.add(Double.parseDouble(OptionMatcher.plain(o)));
             } catch (NumberFormatException e) {
                 // "INVALID" and friends
             }
@@ -475,7 +492,7 @@ public final class EcuAdapter {
             if ("bits".equalsIgnoreCase(info.paramClass)) {
                 String v = port.readOption(cfg, gainParams.get(i));
                 try {
-                    out[i] = Double.parseDouble(v == null ? "" : v.trim());
+                    out[i] = Double.parseDouble(OptionMatcher.plain(v));
                 } catch (NumberFormatException e) {
                     throw new EcuException(gainParams.get(i) + " = '" + v + "' is not a numeric gain");
                 }
@@ -496,7 +513,7 @@ public final class EcuAdapter {
                 double bestDist = Double.POSITIVE_INFINITY;
                 for (String o : info.options) {
                     try {
-                        double d = Math.abs(Double.parseDouble(o.trim()) - gains[i]);
+                        double d = Math.abs(Double.parseDouble(OptionMatcher.plain(o)) - gains[i]);
                         if (d < bestDist) {
                             bestDist = d;
                             best = o;
@@ -555,7 +572,7 @@ public final class EcuAdapter {
         String cfg = config();
         EcuPort.ParamInfo info = port.parameterInfo(cfg, name);
         if ("bits".equalsIgnoreCase(info.paramClass)) {
-            return port.readOption(cfg, name);
+            return OptionMatcher.plain(port.readOption(cfg, name));
         }
         if ("array".equalsIgnoreCase(info.paramClass)) {
             double[][] raw = port.readArray2D(cfg, name);
