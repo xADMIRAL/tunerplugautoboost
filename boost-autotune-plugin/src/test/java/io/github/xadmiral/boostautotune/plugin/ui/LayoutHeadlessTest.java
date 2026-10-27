@@ -104,6 +104,9 @@ class LayoutHeadlessTest {
                         }
                     }
                 }
+                // the report is a compact box: well under half of the window at every text size
+                int reportHeight = a.reportArea().getParent().getParent().getHeight();
+                assertTrue(reportHeight > 0 && reportHeight < 760 * 0.45, String.format("scale %.2f width %d: report box is %d px high", sc, width, reportHeight));
                 // the step bar never stacks its labels on each other
                 Component[] steps = a.stepsBar().getComponents();
                 for (int i = 0; i < steps.length; i++) {

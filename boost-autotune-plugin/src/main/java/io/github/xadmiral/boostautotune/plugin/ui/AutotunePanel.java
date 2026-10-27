@@ -47,7 +47,10 @@ public final class AutotunePanel extends JPanel {
     private final JLabel[] live = new JLabel[LIVE_NAMES.length];
     private final JPanel[] liveCells = new JPanel[LIVE_NAMES.length];
     private Color cardBg;
-    private final JTextArea report = new JTextArea(14, 80);
+    private final JTextArea report = new JTextArea(7, 80);
+    private final JButton reportSize = new JButton("Expand");
+    private static final int REPORT_ROWS_SMALL = 7;
+    private static final int REPORT_ROWS_LARGE = 22;
     private final JButton startSession = new JButton("Start session");
     private final JButton writePlan = new JButton("Write plan to ECU");
     private final JButton startRun = new JButton("Start run");
@@ -161,21 +164,40 @@ public final class AutotunePanel extends JPanel {
 
         report.setEditable(false);
         report.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        JPanel center = new JPanel(new BorderLayout());
+        // the report is a compact box under the buttons (a few rows, Expand for more), not a white
+        // field that swallows the rest of the window
         JPanel rows = new JPanel(new GridBagLayout());
         GridBagConstraints rc = new GridBagConstraints();
         rc.gridx = 0;
         rc.weightx = 1;
         rc.fill = GridBagConstraints.HORIZONTAL;
-        rc.anchor = GridBagConstraints.WEST;
+        rc.anchor = GridBagConstraints.NORTHWEST;
         rows.add(buttonRow, rc);
         rows.add(secondaryRow, rc);
+        JPanel reportHeader = new JPanel(new BorderLayout(6, 0));
+        reportHeader.add(Ui.sectionHeader("Last run report"), BorderLayout.CENTER);
+        reportSize.setMargin(new Insets(1, 8, 1, 8));
+        reportHeader.add(reportSize, BorderLayout.EAST);
+        rc.insets = new Insets(4, 0, 0, 0);
+        rows.add(reportHeader, rc);
+        final JScrollPane reportScroll = new JScrollPane(report);
+        rc.insets = new Insets(2, 0, 0, 0);
+        rows.add(reportScroll, rc);
+        // NORTH of a BorderLayout: the stack keeps its preferred height whatever the window size,
+        // so a short window never squeezes the wrapped button rows
+        JPanel center = new JPanel(new BorderLayout());
         center.add(rows, BorderLayout.NORTH);
-        JPanel reportBox = new JPanel(new BorderLayout());
-        reportBox.add(Ui.sectionHeader("Last run report"), BorderLayout.NORTH);
-        reportBox.add(new JScrollPane(report), BorderLayout.CENTER);
-        center.add(reportBox, BorderLayout.CENTER);
         add(center, BorderLayout.CENTER);
+        reportSize.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                boolean small = report.getRows() == REPORT_ROWS_SMALL;
+                report.setRows(small ? REPORT_ROWS_LARGE : REPORT_ROWS_SMALL);
+                reportSize.setText(small ? "Shrink" : "Expand");
+                reportScroll.setPreferredSize(null);
+                rows.revalidate();
+                rows.repaint();
+            }
+        });
 
         startSession.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -301,6 +323,11 @@ public final class AutotunePanel extends JPanel {
 
     public Ui.Steps stepsBar() {
         return steps;
+    }
+
+    /** The report area (layout checks). */
+    public JTextArea reportArea() {
+        return report;
     }
 
     public TuneMode selectedMode() {
