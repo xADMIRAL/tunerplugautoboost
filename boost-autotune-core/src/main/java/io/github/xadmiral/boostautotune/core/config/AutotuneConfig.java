@@ -143,6 +143,18 @@ public final class AutotuneConfig {
     public double windowStepKpa = 5;
     public double windowMinKpa = 10;
     public double windowMaxKpa = 60;
+    /**
+     * ECU quick spool (valve held shut until boost is near the target), when the ECU has it: on for
+     * the closed-loop runs and its hand-over point tuned (later while the target arrives earlier
+     * without overshoot, earlier on overshoot). Unticked, the closed-loop runs keep the ECU's own
+     * quick spool setting. Either way it is off for the spring and open-loop runs.
+     */
+    public boolean tuneQuickSpool = true;
+    public double quickSpoolStepKpa = 3;
+    public double quickSpoolMinKpa = 3;
+    public double quickSpoolMaxKpa = 40;
+    /** Hand-over used when the ECU's own value is unknown. */
+    public double quickSpoolStartKpa = 15;
 
     // ---- Convergence ------------------------------------------------------------------------------
     /** Closed-loop runs per stage before the stage may be called converged. */
@@ -218,6 +230,11 @@ public final class AutotuneConfig {
         c.maxSpoolPushesPerStage = maxSpoolPushesPerStage;
         c.spoolBoostStepPct = spoolBoostStepPct;
         c.tuneClosedLoopWindow = tuneClosedLoopWindow;
+        c.tuneQuickSpool = tuneQuickSpool;
+        c.quickSpoolStepKpa = quickSpoolStepKpa;
+        c.quickSpoolMinKpa = quickSpoolMinKpa;
+        c.quickSpoolMaxKpa = quickSpoolMaxKpa;
+        c.quickSpoolStartKpa = quickSpoolStartKpa;
         c.windowStepKpa = windowStepKpa;
         c.windowMinKpa = windowMinKpa;
         c.windowMaxKpa = windowMaxKpa;
@@ -264,6 +281,9 @@ public final class AutotuneConfig {
         }
         if (characterizeStepPct <= 0) {
             problems.add("characterizeStepPct must be positive");
+        }
+        if (quickSpoolMinKpa < 0 || quickSpoolMinKpa >= quickSpoolMaxKpa || quickSpoolStepKpa <= 0) {
+            problems.add("Quick spool hand-over: minimum must be below maximum and the step positive");
         }
         if (windowMinKpa >= windowMaxKpa || windowStepKpa <= 0) {
             problems.add("Closed-loop window: min must be below max and the step positive");

@@ -72,6 +72,11 @@ public final class TargetsPanel extends JPanel {
         form.addBool("Fastest spool to target", "Valve held shut wherever the target is out of reach, flat target instead of the ramp, then trim / feed-forward / P / closed-loop window are pushed while the target keeps arriving earlier without overshoot",
                 new Form.BoolGet() { public boolean get() { return cfg.fastSpool; } },
                 new Form.BoolSet() { public void set(boolean v) { cfg.fastSpool = v; } });
+        form.addBool("Use and tune the ECU quick spool", "When the ECU has quick spool (valve held shut until boost nears the target): on for the closed-loop runs, "
+                        + "the hand-over moved earlier on overshoot and later while it buys spool. Unticked, the closed-loop runs keep the ECU's own setting. "
+                        + "Off for the spring and open-loop runs either way",
+                new Form.BoolGet() { public boolean get() { return cfg.tuneQuickSpool; } },
+                new Form.BoolSet() { public void set(boolean v) { cfg.tuneQuickSpool = v; } });
         form.beginAdvanced();
         form.section("Spool");
         form.addDouble("Valve counts as shut above, % duty", "A bias cell whose estimate asks for at least this much duty is written as maximum duty",
@@ -95,6 +100,15 @@ public final class TargetsPanel extends JPanel {
                 new Form.DoubleSet() { public void set(double v) { cfg.windowMinKpa = v; } });
         form.addDouble("Window maximum, kPa", "", new Form.DoubleGet() { public double get() { return cfg.windowMaxKpa; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.windowMaxKpa = v; } });
+        form.addDouble("Quick spool search step, kPa", "The hand-over search stops when the gap between a clean and an overshooting hand-over is down to this",
+                new Form.DoubleGet() { public double get() { return cfg.quickSpoolStepKpa; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.quickSpoolStepKpa = v; } });
+        form.addDouble("Quick spool hand-over minimum, kPa", "Latest hand-over allowed (kPa below the target)",
+                new Form.DoubleGet() { public double get() { return cfg.quickSpoolMinKpa; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.quickSpoolMinKpa = v; } });
+        form.addDouble("Quick spool hand-over maximum, kPa", "Earliest hand-over allowed (kPa below the target)",
+                new Form.DoubleGet() { public double get() { return cfg.quickSpoolMaxKpa; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.quickSpoolMaxKpa = v; } });
         form.addDouble("High-RPM taper, kPa", "Lower the target by this much at the last RPM bin (0 = off)",
                 new Form.DoubleGet() { public double get() { return cfg.highRpmTaperKpa; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.highRpmTaperKpa = v; } });

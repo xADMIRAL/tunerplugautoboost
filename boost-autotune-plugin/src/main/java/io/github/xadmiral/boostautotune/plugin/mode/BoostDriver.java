@@ -25,6 +25,10 @@ public final class BoostDriver implements ModeDriver {
 
     public BoostDriver(EcuAdapter adapter, AutotuneConfig cfg) throws EcuException {
         this.adapter = adapter;
+        io.github.xadmiral.boostautotune.plugin.ecu.QuickSpoolFinder.Result qs = adapter.discoverQuickSpool();
+        if (qs != null && qs.found()) {
+            startupLog.add("Quick spool found in this ECU definition: " + qs.describe());
+        }
         List<String> warnings = new ArrayList<String>();
         EcuState state = adapter.read(warnings);
         for (String w : warnings) {
@@ -38,6 +42,14 @@ public final class BoostDriver implements ModeDriver {
                     "WARNING: plugin hard limit %.0f kPa is not below the ECU overboost cut %.0f kPa; lowering it to %.0f",
                     c.maxBoostKpa, overboost, overboost - 5));
             c.maxBoostKpa = overboost - 5;
+        }
+        if (state.hasQuickSpool()) {
+            startupLog.add("Quick spool: " + (state.quickSpoolOn ? "on" : "off")
+                    + (adapter.quickSpoolHandOverBound()
+                    ? String.format(Locale.US, ", hands over %.0f kPa below the target (%s read as %s)",
+                    state.quickSpoolDeltaKpa, adapter.binding().quickSpoolKpaParam, adapter.quickSpoolMeaning())
+                    : ", no hand-over parameter bound: switched only")
+                    + "; switched off for open-loop runs and by a safety abort");
         }
         original = state.copy();
         session = new AutotuneSession(c);

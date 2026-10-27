@@ -26,6 +26,13 @@ public final class EcuAdapter {
     private EcuPort.ParamInfo pInfo, iInfo, dInfo, targetInfo;
     private EcuPort.ParamInfo windowInfo;
     private EcuPort.ParamInfo vvtPInfo, vvtIInfo, vvtDInfo, vvtTableInfo, sparkTableInfo;
+    /** Quick spool as read: option texts, the hand-over parameter and how it reads. */
+    private String quickSpoolOnText;
+    private String quickSpoolOffText;
+    private EcuPort.ParamInfo quickSpoolKpaInfo;
+    private boolean quickSpoolAbsolute;
+    private double quickSpoolReadDelta = Double.NaN;
+    private double quickSpoolReadRaw = Double.NaN;
 
     public EcuAdapter(EcuPort port, EcuBinding binding) {
         this.port = port;
@@ -98,6 +105,7 @@ public final class EcuAdapter {
         } else {
             s.closedLoop = true;
         }
+        readQuickSpool(cfg, s, warnings);
         if (!s.targetTable.xAxis().isStrictlyIncreasing()) {
             warnings.add("Target table RPM axis is not strictly increasing: " + s.targetTable.xAxis());
         }
@@ -105,6 +113,133 @@ public final class EcuAdapter {
             warnings.add("Target table load axis is not strictly increasing: " + s.targetTable.yAxis());
         }
         return s;
+    }
+
+    /**
+     * Fills the quick spool names from the ECU definition when the binding leaves them empty.
+     * Returns what was found, for the session log; null when the binding already names them.
+     */
+    public QuickSpoolFinder.Result discoverQuickSpool() {
+        if (b.has(b.quickSpoolParam) || b.has(b.quickSpoolKpaParam)) {
+            return null;
+        }
+        QuickSpoolFinder.Result r = QuickSpoolFinder.find(port, config());
+        if (r.found()) {
+            b.quickSpoolParam = r.switchParam;
+            b.quickSpoolOnOption = r.onOption;
+            b.quickSpoolKpaParam = r.kpaParam;
+        }
+        return r;
+    }
+
+    /** Quick spool switch and hand-over into the state; the hand-over always as kPa below the target. */
+    private void readQuickSpool(String cfg, EcuState s, List<String> warnings) throws EcuException {
+        s.quickSpoolOn = null;
+        s.quickSpoolDeltaKpa = Double.NaN;
+        quickSpoolKpaInfo = null;
+        quickSpoolReadDelta = Double.NaN;
+        quickSpoolReadRaw = Double.NaN;
+        if (!b.has(b.quickSpoolParam)) {
+            return;
+        }
+        EcuPort.ParamInfo si = port.parameterInfo(cfg, b.quickSpoolParam);
+        List<String> options = si == null ? null : si.options;
+        String cur = port.readOption(cfg, b.quickSpoolParam);
+        String off = OptionMatcher.match(options, "Off");
+        quickSpoolOffText = off != null ? OptionMatcher.plain(off) : "Off";
+        boolean on = off != null ? !OptionMatcher.plain(cur).equals(OptionMatcher.plain(off)) : OptionMatcher.meaning(cur) != 0;
+        String onText = b.has(b.quickSpoolOnOption) ? b.quickSpoolOnOption : null;
+        if (onText == null && options != null) {
+            String o = QuickSpoolFinder.onOption(options, off);
+            onText = o == null ? null : OptionMatcher.plain(o);
+        }
+        quickSpoolOnText = on ? OptionMatcher.plain(cur) : (onText == null ? "On" : onText);
+        s.quickSpoolOn = on;
+        if (!b.has(b.quickSpoolKpaParam)) {
+            return;
+        }
+        EcuPort.ParamInfo ti = port.parameterInfo(cfg, b.quickSpoolKpaParam);
+        String units = ti == null || ti.units == null ? "" : ti.units.trim().toLowerCase(Locale.ROOT);
+        if (!units.isEmpty() && !units.contains("kpa")) {
+            warnings.add("Quick spool hand-over " + b.quickSpoolKpaParam + " reads in '" + ti.units
+                    + "', not kPa: quick spool is switched, its hand-over is left alone");
+            return;
+        }
+        double raw = port.readScalar(cfg, b.quickSpoolKpaParam);
+        quickSpoolKpaInfo = ti;
+        quickSpoolReadRaw = raw;
+        quickSpoolAbsolute = absoluteHandOver(b.quickSpoolKpaMeaning, b.quickSpoolKpaParam, raw);
+        if (quickSpoolAbsolute) {
+            double wot = s.targetTable == null ? Double.NaN : s.targetTable.max();
+            s.quickSpoolDeltaKpa = Double.isNaN(wot) ? Double.NaN : wot - raw;
+        } else {
+            s.quickSpoolDeltaKpa = raw;
+        }
+        quickSpoolReadDelta = s.quickSpoolDeltaKpa;
+    }
+
+    /**
+     * Whether the hand-over parameter is an absolute pressure ("valve shut up to 160 kPa") rather than
+     * a distance below the target ("until 10 kPa below it"). Auto: the name says delta / below /
+     * offset, otherwise a value of 100 kPa or more can only be an absolute boost pressure.
+     */
+    static boolean absoluteHandOver(String meaning, String name, double value) {
+        String m = meaning == null ? "" : meaning.trim().toLowerCase(Locale.ROOT);
+        if (m.equals("absolute")) {
+            return true;
+        }
+        if (m.equals("below target")) {
+            return false;
+        }
+        String n = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        for (String t : new String[]{"delta", "diff", "below", "offset", "margin", "window", "dlt"}) {
+            if (n.contains(t)) {
+                return false;
+            }
+        }
+        return value >= 100;
+    }
+
+    /** True when the binding names a quick spool hand-over the plugin reads and writes in kPa. */
+    public boolean quickSpoolHandOverBound() {
+        return quickSpoolKpaInfo != null;
+    }
+
+    /** How the hand-over parameter was read: "absolute" or "below target". */
+    public String quickSpoolMeaning() {
+        return quickSpoolAbsolute ? "absolute" : "below target";
+    }
+
+    private List<String> writeQuickSpool(String cfg, EcuState s, boolean switchOnly) throws EcuException {
+        List<String> done = new ArrayList<String>();
+        if (!b.has(b.quickSpoolParam) || s.quickSpoolOn == null) {
+            return done;
+        }
+        String text = s.quickSpoolOn ? (quickSpoolOnText == null ? "On" : quickSpoolOnText)
+                : (quickSpoolOffText == null ? "Off" : quickSpoolOffText);
+        done.add(b.quickSpoolParam + " = " + writeOptionResolved(cfg, b.quickSpoolParam, text));
+        if (switchOnly || quickSpoolKpaInfo == null || Double.isNaN(s.quickSpoolDeltaKpa)) {
+            return done;
+        }
+        double raw;
+        if (!quickSpoolAbsolute) {
+            raw = s.quickSpoolDeltaKpa;
+        } else if (Math.abs(s.quickSpoolDeltaKpa - quickSpoolReadDelta) < 1e-6) {
+            raw = quickSpoolReadRaw; // untouched: the ECU's own value, whatever the targets are now
+        } else if (s.targetTable != null) {
+            raw = s.targetTable.max() - s.quickSpoolDeltaKpa;
+        } else {
+            return done;
+        }
+        EcuPort.ParamInfo ti = quickSpoolKpaInfo;
+        if (ti.max > ti.min) {
+            raw = Math.max(ti.min, Math.min(ti.max, raw));
+        }
+        double scale = Math.pow(10, Math.max(0, ti.decimals));
+        raw = Math.round(raw * scale) / scale;
+        port.writeScalar(cfg, b.quickSpoolKpaParam, raw);
+        done.add(b.quickSpoolKpaParam + " = " + raw);
+        return done;
     }
 
     /** Overboost cut limit configured in the ECU, or NaN. */
@@ -154,6 +289,7 @@ public final class EcuAdapter {
             port.writeScalar(cfg, b.closedLoopWindowParam, s.closedLoopWindowKpa);
             done.add(b.closedLoopWindowParam + " = " + s.closedLoopWindowKpa);
         }
+        done.addAll(writeQuickSpool(cfg, s, false));
         if (b.has(b.enableParam) && b.has(b.enableOption)) {
             done.add(b.enableParam + " = " + writeOptionResolved(cfg, b.enableParam, b.enableOption));
         }
@@ -166,10 +302,16 @@ public final class EcuAdapter {
         return done;
     }
 
-    /** Emergency: drop the valve to minimum duty and put the ECU in open loop. */
+    /** Emergency: quick spool off, valve to minimum duty, ECU in open loop. */
     public List<String> writeSafeState(EcuState s) throws EcuException {
         String cfg = config();
         List<String> done = new ArrayList<String>();
+        if (b.has(b.quickSpoolParam)) {
+            // first: quick spool would hold the valve shut whatever the duty tables say
+            EcuState off = new EcuState();
+            off.quickSpoolOn = Boolean.FALSE;
+            done.addAll(writeQuickSpool(cfg, off, true));
+        }
         if (b.hasModeSwitch()) {
             done.add(b.modeParam + " = " + writeOptionResolved(cfg, b.modeParam, b.openLoopOption));
         }

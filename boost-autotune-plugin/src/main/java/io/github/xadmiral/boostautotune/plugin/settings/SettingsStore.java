@@ -218,6 +218,11 @@ public final class SettingsStore {
         p.setProperty(pre + "windowStepKpa", fmt(c.windowStepKpa));
         p.setProperty(pre + "windowMinKpa", fmt(c.windowMinKpa));
         p.setProperty(pre + "windowMaxKpa", fmt(c.windowMaxKpa));
+        p.setProperty(pre + "tuneQuickSpool", Boolean.toString(c.tuneQuickSpool));
+        p.setProperty(pre + "quickSpoolStepKpa", fmt(c.quickSpoolStepKpa));
+        p.setProperty(pre + "quickSpoolMinKpa", fmt(c.quickSpoolMinKpa));
+        p.setProperty(pre + "quickSpoolMaxKpa", fmt(c.quickSpoolMaxKpa));
+        p.setProperty(pre + "quickSpoolStartKpa", fmt(c.quickSpoolStartKpa));
     }
 
     public static void configFrom(AutotuneConfig c, Properties p, String pre) {
@@ -286,6 +291,11 @@ public final class SettingsStore {
         c.windowStepKpa = d(p, pre + "windowStepKpa", c.windowStepKpa);
         c.windowMinKpa = d(p, pre + "windowMinKpa", c.windowMinKpa);
         c.windowMaxKpa = d(p, pre + "windowMaxKpa", c.windowMaxKpa);
+        c.tuneQuickSpool = bool(p, pre + "tuneQuickSpool", c.tuneQuickSpool);
+        c.quickSpoolStepKpa = d(p, pre + "quickSpoolStepKpa", c.quickSpoolStepKpa);
+        c.quickSpoolMinKpa = d(p, pre + "quickSpoolMinKpa", c.quickSpoolMinKpa);
+        c.quickSpoolMaxKpa = d(p, pre + "quickSpoolMaxKpa", c.quickSpoolMaxKpa);
+        c.quickSpoolStartKpa = d(p, pre + "quickSpoolStartKpa", c.quickSpoolStartKpa);
     }
 
     public static void sweepTo(SweepConfig c, Properties p, String pre) {

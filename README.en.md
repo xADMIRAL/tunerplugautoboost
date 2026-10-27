@@ -40,6 +40,21 @@ RPM is the spring pressure, which replaces the setting and feeds the target ramp
 expected in 4th gear (settable, 0 = any): full-throttle samples in another gear are ignored when
 the ECU reports the gear.
 
+**ECU quick spool.** Quick spool (Boost control settings) holds the wastegate shut until boost is
+within a set number of kPa of the target, then hands over to the closed loop. Its parameter names
+differ between Stealth and MS3 builds, so the plugin finds them by name (`spool`): the on/off switch
+and the kPa hand-over; other quick spool parameters (RPM, TPS) are listed and never written. Setup
+shows them in the *Quick spool …* rows, where they can also be set by hand together with how the
+hand-over reads (below the target or absolute; *auto* decides from the name and value). Quick spool
+is switched **off** for the spring run and the open-loop ladder (it would hold the valve shut), and
+**on** for the closed-loop runs with its hand-over tuned (*Use and tune the ECU quick spool* on the
+Boost tab): an overshoot right after quick spool lets go of the valve moves the hand-over earlier
+by about the overshoot, and on the last stage a bisection hands over later while the target
+arrives earlier and stops when a later hand-over only adds overshoot. Unticked, the closed-loop
+runs keep the ECU's own setting. A safety abort switches quick spool off first; *Restore original*
+brings it back. Samples where quick spool holds the valve are kept out of the turbo model. In the
+simulator a 5 kPa (late) and a 35 kPa (early) start both end at 9 kPa below the target.
+
 **Layout.** The Autotune tab shows a coloured state pill and a step bar (Start session › Write plan
 › Start run › End run › Apply & next) with the current step and the button to press next
 highlighted. Every settings tab shows only the mode's goals until *Advanced settings* is ticked.

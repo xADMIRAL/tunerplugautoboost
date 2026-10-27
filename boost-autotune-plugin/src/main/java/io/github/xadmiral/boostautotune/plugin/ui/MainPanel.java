@@ -231,6 +231,19 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
         return new Rectangle(0, 0, 1920, 1080);
     }
 
+    /** Keeps the quick spool names a boost session found by name, so Setup shows them and they are saved. */
+    private void adoptQuickSpool() {
+        EcuBinding found = ctl.adapter() == null ? null : ctl.adapter().binding();
+        if (found == null || binding.has(binding.quickSpoolParam) || !found.has(found.quickSpoolParam)) {
+            return;
+        }
+        binding.quickSpoolParam = found.quickSpoolParam;
+        binding.quickSpoolOnOption = found.quickSpoolOnOption;
+        binding.quickSpoolKpaParam = found.quickSpoolKpaParam;
+        setup.reloadFromBinding();
+        saveSettings();
+    }
+
     /** Changes the text size of the whole plugin and remembers it. */
     public void setFontScale(double scale) {
         fontScale = scale;
@@ -372,6 +385,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
                     break;
                 default:
                     ctl.startSession(cfg, binding);
+                    adoptQuickSpool();
             }
             analysis.refresh();
             tabs.setSelectedComponent(autotune);

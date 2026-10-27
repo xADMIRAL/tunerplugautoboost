@@ -22,6 +22,10 @@ import java.util.Map;
  */
 public final class SimEcuPort implements EcuPort {
     public static final String CONFIG = "Simulated MS3";
+    /** Quick spool as a Stealth-style INI might name it: not in the preset, found by name. */
+    public static final String QS_SWITCH = "boost_ctl_quickspool";
+    public static final String QS_KPA = "boost_ctl_quickspool_kpa";
+    public static final String QS_RPM = "boost_ctl_quickspool_rpm";
     private final Map<String, Double> scalars = new HashMap<String, Double>();
     private final Map<String, String> options = new HashMap<String, String>();
     private final Map<String, double[][]> arrays = new HashMap<String, double[][]>();
@@ -52,6 +56,10 @@ public final class SimEcuPort implements EcuPort {
         options.put(b.modeParam, "Open-loop");
         options.put(b.enableParam, "Off");
         options.put(b.closedLoopExtraParam, "Basic Mode");
+        // quick spool on, handing over too late (the overshoot the autotune has to take out)
+        options.put(QS_SWITCH, "On");
+        scalars.put(QS_KPA, 6.0);
+        scalars.put(QS_RPM, 2000.0);
         // VVT: the JZX110 base tune's intake table and gains
         double[][] vvt = {
                 {0, 0, 0, 0, 0, 0, 0, 0},
@@ -209,6 +217,8 @@ public final class SimEcuPort implements EcuPort {
         s.maxDuty = scalars.get(b.maxDuty);
         s.closedLoopWindowKpa = scalars.containsKey(b.closedLoopWindowParam) ? scalars.get(b.closedLoopWindowParam) : Double.NaN;
         s.closedLoop = "Closed-loop".equals(options.get(b.modeParam));
+        s.quickSpoolOn = "On".equals(options.get(QS_SWITCH));
+        s.quickSpoolDeltaKpa = scalars.get(QS_KPA);
         return s;
     }
 
@@ -282,7 +292,8 @@ public final class SimEcuPort implements EcuPort {
                     : name.contains("rpm") || name.contains("_arm") || name.contains("_hrd") || name.contains("_lim") ? 25000
                     : name.equals("boost_ctl_lowerlimit") ? 200 : name.equals("als_iac_pos") ? 25.5 : 100;
             double min = name.equals("flats_deg") ? -90 : name.equals("boost_ctl_lowerlimit") ? 5 : 0;
-            return new ParamInfo("scalar", "", min, max, name.equals("als_iac_steps") ? 0 : 1, 1, 1, Collections.<String>emptyList());
+            String units = name.equals(QS_KPA) ? "kPa" : name.equals(QS_RPM) ? "RPM" : "";
+            return new ParamInfo("scalar", units, min, max, name.equals("als_iac_steps") ? 0 : 1, 1, 1, Collections.<String>emptyList());
         }
         if (options.containsKey(name)) {
             // the option lists of the real INI for the switches the plugin writes; plain Off / On otherwise

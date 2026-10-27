@@ -190,6 +190,160 @@ class AutotuneEndToEndTest {
         assertEquals(first.springKpa, plan.ecu.targetTable.get(0, 7), 1.5);
     }
 
+    /** The untouched tune with the ECU's quick spool set as given (on/off, hand-over kPa below the target). */
+    private static EcuState quickSpoolTune(boolean on, double deltaKpa) {
+        EcuState e = untouchedMs3Tune();
+        e.quickSpoolOn = on;
+        e.quickSpoolDeltaKpa = deltaKpa;
+        e.closedLoopWindowKpa = 30;
+        return e;
+    }
+
+    private static final class QuickSpoolRun {
+        final List<RunPlan> plans = new ArrayList<RunPlan>();
+        final List<RunReport> reports = new ArrayList<RunReport>();
+        final StringBuilder log = new StringBuilder();
+        RunPlan last;
+
+        boolean said(String text) {
+            return log.indexOf(text) >= 0;
+        }
+
+        RunPlan firstClosedLoop() {
+            for (RunPlan p : plans) {
+                if (p.phase == SessionPhase.CLOSED_LOOP) {
+                    return p;
+                }
+            }
+            return null;
+        }
+
+        /** Spool figures of the closed-loop runs on the last stage, in order. */
+        List<Double> lastStageReach() {
+            List<Double> out = new ArrayList<Double>();
+            for (RunReport r : reports) {
+                if (r.plan.phase == SessionPhase.CLOSED_LOOP && r.plan.stageIndex == 1 && Stats.finite(r.spoolReachRpm)) {
+                    out.add(r.spoolReachRpm);
+                }
+            }
+            return out;
+        }
+    }
+
+    /** Two 4th-gear pulls per run until the session is done; every plan and report is kept. */
+    private static QuickSpoolRun driveQuickSpool(AutotuneConfig cfg, EcuState tune, int maxRuns) {
+        AutotuneSession session = new AutotuneSession(cfg);
+        BoostPlant plant = new BoostPlant(42);
+        SimEcu ecu = new SimEcu(tune);
+        PullSimulator sim = new PullSimulator(plant, ecu);
+        QuickSpoolRun o = new QuickSpoolRun();
+        RunPlan plan = session.initialize(tune);
+        o.log.append(String.join("\n", session.log())).append('\n');
+        while (session.state() != SessionState.DONE && o.reports.size() < maxRuns) {
+            o.plans.add(plan);
+            ecu.apply(plan.ecu);
+            session.startRun();
+            for (int k = 0; k < 2; k++) {
+                for (Sample s : sim.pull(4)) {
+                    session.onSample(s);
+                }
+                sim.setTime(sim.time() + 3);
+            }
+            assertNotEquals(SessionState.ABORTED, session.state(), "aborted: " + session.abortReason() + "\n" + o.log);
+            RunReport r = session.endRun();
+            o.reports.add(r);
+            o.log.append(r.summary()).append('\n');
+            plan = session.commit(r);
+        }
+        o.last = plan;
+        assertEquals(SessionState.DONE, session.state(), "did not converge in " + o.reports.size() + " runs:\n" + o.log);
+        return o;
+    }
+
+    @Test
+    void quickSpoolIsOffForTheOpenValveRunsAndALateHandOverMovesEarlier() {
+        AutotuneConfig cfg = config();
+        cfg.autoWastegate = true;
+        cfg.gear = 4;
+        QuickSpoolRun o = driveQuickSpool(cfg, quickSpoolTune(true, 5), 22);
+        // the spring run and the ladder never run with quick spool: it would hold the valve shut
+        for (RunPlan p : o.plans) {
+            if (p.phase == SessionPhase.CHARACTERIZE) {
+                assertEquals(Boolean.FALSE, p.ecu.quickSpoolOn, p.title());
+            }
+        }
+        assertTrue(o.plans.get(0).springRun);
+        assertEquals(132, o.reports.get(0).springKpa, 4, "the spring is read with the valve really open");
+        assertTrue(o.plans.get(0).notes.toString().contains("Quick spool off"), o.plans.get(0).notes.toString());
+        RunPlan firstClosed = o.firstClosedLoop();
+        assertEquals(Boolean.TRUE, firstClosed.ecu.quickSpoolOn);
+        assertEquals(5, firstClosed.ecu.quickSpoolDeltaKpa, 1e-9, "starts from the ECU's own hand-over");
+        // 5 kPa is too late: the actuator still fills after the hand-over and the boost overshoots
+        assertTrue(o.said("Quick spool hands over earlier: 5 ->"), o.log.toString());
+        assertTrue(o.said("Quick spool hand-over settled at"), o.log.toString());
+        assertEquals(Boolean.TRUE, o.last.ecu.quickSpoolOn);
+        assertTrue(o.last.ecu.quickSpoolDeltaKpa >= 7 && o.last.ecu.quickSpoolDeltaKpa <= 16,
+                "hand-over " + o.last.ecu.quickSpoolDeltaKpa + "\n" + o.log);
+        RunReport last = o.reports.get(o.reports.size() - 1);
+        for (ResponseMetrics m : last.metrics) {
+            assertTrue(m.overshootKpa < cfg.overshootThresholdKpa, "final overshoot " + m.overshootKpa + "\n" + last.summary());
+        }
+        assertTrue(o.reports.size() <= 20, "runs " + o.reports.size());
+        assertTrue(last.summary().contains("Quick spool for the next run: on, hands over"), last.summary());
+    }
+
+    @Test
+    void anEarlyQuickSpoolHandOverIsSearchedLaterWhileItBuysSpool() {
+        AutotuneConfig cfg = config();
+        cfg.autoWastegate = true;
+        cfg.gear = 4;
+        QuickSpoolRun o = driveQuickSpool(cfg, quickSpoolTune(true, 35), 24);
+        assertEquals(35, o.firstClosedLoop().ecu.quickSpoolDeltaKpa, 1e-9);
+        assertTrue(o.said("Quick spool push 1/4: quick spool hands over later: 35 ->"), o.log.toString());
+        assertTrue(o.said("Quick spool hand-over settled at"), o.log.toString());
+        double finalDelta = o.last.ecu.quickSpoolDeltaKpa;
+        assertTrue(finalDelta <= 15 && finalDelta >= cfg.quickSpoolMinKpa, "hand-over " + finalDelta + "\n" + o.log);
+        List<Double> reach = o.lastStageReach();
+        assertTrue(reach.get(reach.size() - 1) < reach.get(0), "the target arrives earlier: " + reach);
+        RunReport last = o.reports.get(o.reports.size() - 1);
+        for (ResponseMetrics m : last.metrics) {
+            assertTrue(m.overshootKpa < cfg.overshootThresholdKpa, "final overshoot " + m.overshootKpa);
+        }
+    }
+
+    @Test
+    void untickedTheClosedLoopKeepsTheEcuQuickSpoolButTheOpenValveRunsStillSwitchItOff() {
+        AutotuneConfig cfg = config();
+        cfg.autoWastegate = true;
+        cfg.gear = 4;
+        cfg.tuneQuickSpool = false;
+        QuickSpoolRun o = driveQuickSpool(cfg, quickSpoolTune(true, 20), 22);
+        for (RunPlan p : o.plans) {
+            if (p.phase == SessionPhase.CHARACTERIZE) {
+                assertEquals(Boolean.FALSE, p.ecu.quickSpoolOn, p.title());
+            } else {
+                assertEquals(Boolean.TRUE, p.ecu.quickSpoolOn, p.title());
+                assertEquals(20, p.ecu.quickSpoolDeltaKpa, 1e-9, p.title());
+            }
+        }
+        assertEquals(Boolean.TRUE, o.last.ecu.quickSpoolOn);
+        assertEquals(20, o.last.ecu.quickSpoolDeltaKpa, 1e-9);
+        assertFalse(o.said("Quick spool push"), o.log.toString());
+        assertTrue(o.said("Closed-loop runs keep the ECU's own quick spool setting"), o.log.toString());
+    }
+
+    @Test
+    void anEcuWithoutQuickSpoolIsNotTouched() {
+        AutotuneConfig cfg = config();
+        cfg.autoWastegate = true;
+        cfg.gear = 4;
+        QuickSpoolRun o = driveQuickSpool(cfg, untouchedMs3Tune(), 22);
+        for (RunPlan p : o.plans) {
+            assertNull(p.ecu.quickSpoolOn, p.title());
+        }
+        assertFalse(o.said("Quick spool"), o.log.toString());
+    }
+
     /** Drives a whole session (3rd + 4th gear pull per run) and returns what it ended with. */
     private static Outcome drive(AutotuneConfig cfg, int maxRuns, boolean bindWindow) {
         AutotuneSession session = new AutotuneSession(cfg);

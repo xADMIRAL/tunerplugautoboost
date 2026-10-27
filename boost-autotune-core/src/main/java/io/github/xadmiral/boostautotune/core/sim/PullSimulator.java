@@ -150,18 +150,20 @@ public final class PullSimulator {
 
     private Sample tick(double rpm, double tps, double dt, int gear) {
         double duty = 0;
+        double applied;
         double map = plant.map();
         int steps = Math.max(1, (int) Math.round(dt / controlDt));
         double sub = dt / steps;
         double noisy = map;
         double adv = Double.NaN;
         for (int i = 0; i < steps; i++) {
-            duty = ecu.control(rpm, tps, plant.map(), sub);
+            applied = ecu.control(rpm, tps, plant.map(), sub);
+            duty = ecu.lastDuty(); // logged: what the ECU commands, not what the actuator has caught up with
             ecu.alsStep(rpm, tps, sub);
             if (ecu.alsActive()) {
                 noisy = plant.stepTowards(ecu.alsSteadyMap(rpm, tps), sub);
             } else {
-                noisy = plant.step(rpm, tps, duty, sub);
+                noisy = plant.step(rpm, tps, applied, sub);
             }
             ecu.vvtStep(rpm, plant.map(), sub);
             adv = ecu.sparkStep(rpm, plant.map(), tps, sub);

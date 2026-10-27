@@ -67,13 +67,21 @@ class ControllerDemoIntegrationTest {
         assertNotNull(ctl.original());
         assertEquals(100, ctl.original().biasTable.get(0, 0), 1e-9);
 
+        // the demo ECU has quick spool under names no preset knows: found by name, on at a too-late 6 kPa
+        assertTrue(String.join("\n", listener.log).contains("Quick spool found in this ECU definition: switch " + SimEcuPort.QS_SWITCH),
+                String.join("\n", listener.log));
+        assertEquals(Boolean.TRUE, ctl.original().quickSpoolOn);
+        assertEquals(6, ctl.original().quickSpoolDeltaKpa, 1e-9);
         int runs = 0;
-        while (ctl.state() != SessionState.DONE && runs < 16) {
+        while (ctl.state() != SessionState.DONE && runs < 24) {
             ctl.writePlanToEcu();
             assertTrue(ctl.isEcuPrepared());
             // the plan must be visible in the simulated ECU
             String mode = port.readOption(SimEcuPort.CONFIG, binding.modeParam);
             assertEquals(ctl.session().plan().ecu.closedLoop ? "Closed-loop" : "Open-loop", mode);
+            // quick spool would hold the valve shut in an open-loop run: off there, on in closed loop
+            assertEquals(ctl.session().plan().ecu.closedLoop ? "On" : "Off", port.readOption(SimEcuPort.CONFIG, SimEcuPort.QS_SWITCH),
+                    ctl.session().plan().title());
             ctl.startRun();
             assertEquals(SessionState.RECORDING, ctl.state());
             port.simulatePull(3, 1000);
@@ -88,7 +96,11 @@ class ControllerDemoIntegrationTest {
             runs++;
         }
         assertEquals(SessionState.DONE, ctl.state(), String.join("\n", listener.log));
-        assertTrue(runs <= 16, "runs " + runs);
+        assertTrue(runs <= 24, "runs " + runs);
+        assertEquals("On", port.readOption(SimEcuPort.CONFIG, SimEcuPort.QS_SWITCH));
+        double handOver = port.readScalar(SimEcuPort.CONFIG, SimEcuPort.QS_KPA);
+        assertTrue(handOver >= 7 && handOver <= 20, "quick spool hands over earlier than the overshooting 6 kPa: " + handOver);
+        assertTrue(String.join("\n", listener.log).contains("Quick spool hands over earlier"), "quick spool overshoot fixed");
         assertTrue(String.join("\n", listener.log).contains("Spool push"), "fast spool pushes expected in the log");
         double window = port.readScalar(SimEcuPort.CONFIG, binding.closedLoopWindowParam);
         assertTrue(window >= 25 && window <= 40, "closed-loop window moved by at most two steps: " + window);

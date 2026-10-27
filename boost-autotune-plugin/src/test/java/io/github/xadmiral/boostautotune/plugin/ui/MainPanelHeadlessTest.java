@@ -58,6 +58,7 @@ class MainPanelHeadlessTest {
         assertEquals("true", raw.getProperty("tune.fastSpool"));
         assertEquals("true", raw.getProperty("tune.autoWastegate"));
         assertEquals("4", raw.getProperty("tune.gear"));
+        assertEquals("true", raw.getProperty("tune.tuneQuickSpool"));
         assertEquals("boost_ctl_lowerlimit", raw.getProperty("ecu.closedLoopWindowParam"));
         assertEquals("als_timing", raw.getProperty("ecu.alsTimingTable"));
         assertEquals("45", raw.getProperty("knock.noiseTargetPct"));

@@ -65,6 +65,15 @@ public final class EcuBinding {
     /** Extra parameter forced when closing the loop, e.g. MS3 boost_ctl_flags = "Advanced Mode". */
     public String closedLoopExtraParam = "";
     public String closedLoopExtraOption = "";
+    /**
+     * ECU quick spool (valve held shut until boost nears the target), optional. Firmwares name it
+     * differently, so empty names are looked up by name ("spool") when a boost session starts.
+     */
+    public String quickSpoolParam = "";
+    public String quickSpoolOnOption = "";
+    public String quickSpoolKpaParam = "";
+    /** How the hand-over parameter reads: "auto", "below target" (kPa under the target) or "absolute" (kPa). */
+    public String quickSpoolKpaMeaning = "auto";
 
     // ---- VVT ----
     public String vvtAngleChannel = "";
@@ -151,6 +160,10 @@ public final class EcuBinding {
 
     public boolean hasOpenLoopTable() {
         return has(openLoopTable) && has(openLoopXBins) && has(openLoopYBins);
+    }
+
+    public boolean hasQuickSpool() {
+        return has(quickSpoolParam);
     }
 
     public boolean hasModeSwitch() {
@@ -306,6 +319,15 @@ public final class EcuBinding {
         checkParam(problems, params, "Extra closed-loop parameter", closedLoopExtraParam, false);
         checkParam(problems, params, "Overboost limit", overboostLimit, false);
         checkParam(problems, params, "Closed-loop window parameter", closedLoopWindowParam, false);
+        checkParam(problems, params, "Quick spool switch", quickSpoolParam, false);
+        checkParam(problems, params, "Quick spool hand-over parameter", quickSpoolKpaParam, false);
+        if (has(quickSpoolKpaParam) && !has(quickSpoolParam)) {
+            problems.add("Quick spool hand-over parameter is set without the quick spool switch");
+        }
+        String m = quickSpoolKpaMeaning == null ? "" : quickSpoolKpaMeaning.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!m.isEmpty() && !m.equals("auto") && !m.equals("below target") && !m.equals("absolute")) {
+            problems.add("Quick spool hand-over meaning must be 'auto', 'below target' or 'absolute', not '" + quickSpoolKpaMeaning + "'");
+        }
         if (hasOpenLoopTable() && !hasModeSwitch()) {
             problems.add("Open-loop characterization needs the open/closed loop switch parameter and both option names");
         }
@@ -372,6 +394,10 @@ public final class EcuBinding {
         p.setProperty(prefix + "enableOption", enableOption);
         p.setProperty(prefix + "closedLoopExtraParam", closedLoopExtraParam);
         p.setProperty(prefix + "closedLoopExtraOption", closedLoopExtraOption);
+        p.setProperty(prefix + "quickSpoolParam", quickSpoolParam);
+        p.setProperty(prefix + "quickSpoolOnOption", quickSpoolOnOption);
+        p.setProperty(prefix + "quickSpoolKpaParam", quickSpoolKpaParam);
+        p.setProperty(prefix + "quickSpoolKpaMeaning", quickSpoolKpaMeaning);
         p.setProperty(prefix + "vvtAngleChannel", vvtAngleChannel);
         p.setProperty(prefix + "vvtTargetChannel", vvtTargetChannel);
         p.setProperty(prefix + "fuelLoadChannel", fuelLoadChannel);
@@ -463,6 +489,10 @@ public final class EcuBinding {
         enableOption = p.getProperty(prefix + "enableOption", enableOption);
         closedLoopExtraParam = p.getProperty(prefix + "closedLoopExtraParam", closedLoopExtraParam);
         closedLoopExtraOption = p.getProperty(prefix + "closedLoopExtraOption", closedLoopExtraOption);
+        quickSpoolParam = p.getProperty(prefix + "quickSpoolParam", quickSpoolParam);
+        quickSpoolOnOption = p.getProperty(prefix + "quickSpoolOnOption", quickSpoolOnOption);
+        quickSpoolKpaParam = p.getProperty(prefix + "quickSpoolKpaParam", quickSpoolKpaParam);
+        quickSpoolKpaMeaning = p.getProperty(prefix + "quickSpoolKpaMeaning", quickSpoolKpaMeaning);
         vvtAngleChannel = p.getProperty(prefix + "vvtAngleChannel", vvtAngleChannel);
         vvtTargetChannel = p.getProperty(prefix + "vvtTargetChannel", vvtTargetChannel);
         fuelLoadChannel = p.getProperty(prefix + "fuelLoadChannel", fuelLoadChannel);

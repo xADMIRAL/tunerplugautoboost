@@ -53,11 +53,25 @@ public final class AutotuneSession {
     private double[] ceilingShut;
     private final java.util.Map<Integer, double[]> floorByStage = new java.util.HashMap<Integer, double[]>();
     /** Spool push state of the current stage. */
-    private enum Knob { TRIM, BOOST, P, WINDOW, DONE }
-    private Knob knob = Knob.TRIM;
+    private enum Knob { QUICK_SPOOL, TRIM, BOOST, P, WINDOW, DONE }
+    private Knob knob = Knob.QUICK_SPOOL;
     private Knob pushPending;
     private double pushBaselineRpm = Double.NaN;
     private double windowBeforePush = Double.NaN;
+    private double quickSpoolBeforePush = Double.NaN;
+    /** Overshoot of the run that moved the hand-over earlier (NaN when the last run did not). */
+    private double quickSpoolRaiseOvershoot = Double.NaN;
+    /** Hand-over search of the current stage: latest hand-over seen without overshoot, earliest seen with it. */
+    private double quickSpoolGood = Double.NaN;
+    private double quickSpoolBad = Double.NaN;
+    private int quickSpoolPushes;
+    /** Overshoot of the run before the hand-over push. */
+    private double quickSpoolBaselineOvershoot = Double.NaN;
+    private static final int MAX_QUICK_SPOOL_PUSHES = 4;
+    /** Quick spool as the ECU had it at the start, and whether the session tunes its hand-over. */
+    private Boolean quickSpoolOriginal;
+    private double quickSpoolOriginalDelta = Double.NaN;
+    private boolean quickSpoolTuned;
     private int pushesInStage;
     private double bestReachRpm = Double.NaN;
     /** Bias columns that got the last feed-forward boost push, for a revert. */
@@ -164,6 +178,9 @@ public final class AutotuneSession {
             throw new IllegalStateException("A target table is required");
         }
         current = ecu.copy();
+        quickSpoolOriginal = current.quickSpoolOn;
+        quickSpoolOriginalDelta = current.quickSpoolDeltaKpa;
+        quickSpoolTuned = current.hasQuickSpool() && cfg.tuneQuickSpool && cfg.fastSpool && Stats.finite(current.quickSpoolDeltaKpa);
         Axis rpmAxis = current.hasBiasTable() ? current.biasTable.xAxis() : current.targetTable.xAxis();
         model = new PlantModel(rpmAxis, cfg.dutyBinPct, cfg.defaultGainKpaPerPct);
         spoolTrim = current.hasBiasTable() ? Grid.filled(current.biasTable.xAxis(), current.biasTable.yAxis(), 0) : null;
@@ -198,6 +215,22 @@ public final class AutotuneSession {
                     + "then spool trim / P / closed-loop window are pushed while the target keeps arriving earlier without overshoot"
                     + (Stats.finite(current.closedLoopWindowKpa) && cfg.tuneClosedLoopWindow
                     ? String.format(Locale.US, " (window now %.0f kPa)", current.closedLoopWindowKpa) : ""));
+        }
+        if (current.hasQuickSpool()) {
+            String was = String.format(Locale.US, "Quick spool is %s in the ECU%s", Boolean.TRUE.equals(quickSpoolOriginal) ? "on" : "off",
+                    Stats.finite(quickSpoolOriginalDelta) ? String.format(Locale.US, " (hands over %.0f kPa below the target)", quickSpoolOriginalDelta) : "");
+            note(was + (canCharacterize ? ": switched off for the spring and open-loop runs, the valve must follow the planned duty" : ""));
+            if (quickSpoolTuned) {
+                note(String.format(Locale.US, "Closed-loop runs: quick spool on, hand-over tuned from %.0f kPa below the target (%.0f-%.0f kPa)",
+                        startQuickSpoolDelta(), cfg.quickSpoolMinKpa, cfg.quickSpoolMaxKpa));
+            } else if (cfg.tuneQuickSpool && cfg.fastSpool && !Stats.finite(quickSpoolOriginalDelta)) {
+                note("Quick spool hand-over parameter is not bound (Setup): the closed-loop runs keep the ECU's quick spool switch as it is");
+            } else {
+                note("Closed-loop runs keep the ECU's own quick spool setting");
+            }
+        }
+        if (phase == SessionPhase.CLOSED_LOOP) {
+            quickSpoolForClosedLoop();
         }
         plan = phase == SessionPhase.CHARACTERIZE ? planCharacterize() : planClosedLoop(true);
         state = SessionState.READY;
@@ -356,7 +389,7 @@ public final class AutotuneSession {
         report.messages.add(String.format(Locale.US, "Wastegate spring pressure measured: %.0f kPa (median of %d samples%s); was %.0f kPa in the settings",
                 spring, use.size(), use == plateau ? String.format(Locale.US, " above %.0f rpm", from) : "", cfg.wastegateKpa));
         cfg.wastegateKpa = used;
-        int added = addObservations(report.pulls, 1.0, false, 1.0);
+        int added = addObservations(report.pulls, 1.0, false, 1.0, null);
         report.messages.add(String.format(Locale.US, "%d steady samples added to the plant model at %.0f%% duty (valve open)", added, plan.openLoopDuty));
         report.plantGainKpaPerPct = model.gainKpaPerPct();
         report.nextPlan = planCharacterize();
@@ -368,7 +401,7 @@ public final class AutotuneSession {
             return;
         }
         double duty = plan.openLoopDuty;
-        int added = addObservations(report.pulls, 1.0, false, 1.0);
+        int added = addObservations(report.pulls, 1.0, false, 1.0, null);
         report.messages.add(String.format(Locale.US, "%d steady samples added to the plant model at %.0f%% duty", added, duty));
         if (added > 0) {
             ladderDuties.add(duty);
@@ -389,6 +422,7 @@ public final class AutotuneSession {
             next.openLoopTable = TargetTableBuilder.buildOpenLoopDuty(current.openLoopTable, step.duty, cfg,
                     current.minDuty, current.maxDuty);
             next.closedLoop = false;
+            quickSpoolOff(next);
             RunPlan np = new RunPlan(runNumber + 1, SessionPhase.CHARACTERIZE, stageIndex, cfg.targetStagesKpa.get(0),
                     step.duty, next);
             np.gear = cfg.gear;
@@ -409,6 +443,7 @@ public final class AutotuneSession {
         EcuState withBias = current.copy();
         withBias.biasTable = bias.grid;
         current = withBias;
+        quickSpoolForClosedLoop();
         phase = SessionPhase.CLOSED_LOOP;
         closedLoopRunsInStage = 0;
         report.nextPlan = planClosedLoop(true);
@@ -448,9 +483,11 @@ public final class AutotuneSession {
         double ovsMed = overshoots.isEmpty() ? 0 : Stats.median(overshoots);
         boolean overshootNow = ovsMed >= cfg.overshootThresholdKpa;
         if (cfg.fastSpool) {
-            updateCeiling(report.pulls);
+            updateCeiling(report.pulls, report.plan.ecu);
         }
         boolean windowBound = cfg.tuneClosedLoopWindow && Stats.finite(current.closedLoopWindowKpa);
+        boolean quickSpoolActive = quickSpoolActive();
+        boolean quickSpoolRestored = false;
 
         PidSuggestion pid = PidTuner.suggest(current.pid, report.metrics, cfg, hasFf, convergedStreak > 0);
         report.pidSuggestion = pid;
@@ -459,7 +496,33 @@ public final class AutotuneSession {
         next.pid = pid.after;
 
         // ---- judge the previous spool push ----
-        if (cfg.fastSpool && pushPending != null) {
+        boolean overshootSeen = overshootNow || pid.transientOvershoot;
+        if (cfg.fastSpool && pushPending == Knob.QUICK_SPOOL) {
+            double tried = current.quickSpoolDeltaKpa;
+            boolean gained = Stats.finite(reach) && Stats.finite(pushBaselineRpm) && reach <= pushBaselineRpm - cfg.spoolImproveRpm;
+            boolean worse = Stats.finite(quickSpoolBaselineOvershoot) && ovsMed > quickSpoolBaselineOvershoot + 2 && !gained;
+            if (overshootSeen || worse) {
+                quickSpoolBad = tried;
+                next.quickSpoolDeltaKpa = quickSpoolBeforePush;
+                quickSpoolRestored = true;
+                report.messages.add(overshootSeen
+                        ? String.format(Locale.US, "Quick spool handing over %.0f kPa below the target overshoots %.1f kPa: back to %.0f kPa",
+                        tried, ovsMed, quickSpoolBeforePush)
+                        : String.format(Locale.US, "Quick spool handing over %.0f kPa below the target only adds overshoot (%.1f -> %.1f kPa, "
+                        + "target no earlier): back to %.0f kPa", tried, quickSpoolBaselineOvershoot, ovsMed, quickSpoolBeforePush));
+            } else {
+                quickSpoolGood = tried;
+                report.messages.add(String.format(Locale.US,
+                        "Quick spool handing over %.0f kPa below the target: no overshoot (%.1f kPa), target at %.0f rpm (was %.0f): kept",
+                        tried, ovsMed, reach, pushBaselineRpm));
+            }
+            if (Double.isNaN(quickSpoolCandidate(quickSpoolRestored ? quickSpoolBeforePush : tried)) || quickSpoolPushes >= MAX_QUICK_SPOOL_PUSHES) {
+                report.messages.add(String.format(Locale.US, "Quick spool hand-over settled at %.0f kPa below the target",
+                        quickSpoolRestored ? quickSpoolBeforePush : tried));
+                knob = nextKnob(Knob.QUICK_SPOOL);
+            }
+            pushPending = null;
+        } else if (cfg.fastSpool && pushPending != null) {
             String name = pushPending.name().toLowerCase(Locale.US);
             if (overshootNow) {
                 String undo = "gains soften / bias trimmed as usual";
@@ -484,13 +547,49 @@ public final class AutotuneSession {
             pushPending = null;
         }
 
+        // ---- quick spool: an overshoot on the rise after the valve was held shut means the hand-over is
+        // too late (the actuator still has to fill before the valve cracks open): hand over earlier
+        boolean quickSpoolEarlier = false;
+        double raisedFrom = quickSpoolRaiseOvershoot;
+        quickSpoolRaiseOvershoot = Double.NaN;
+        if (quickSpoolActive && !quickSpoolRestored && !overshootSeen) {
+            quickSpoolGood = Stats.finite(quickSpoolGood) ? Math.min(quickSpoolGood, current.quickSpoolDeltaKpa) : current.quickSpoolDeltaKpa;
+        }
+        if (quickSpoolActive && !quickSpoolRestored && overshootSeen) {
+            double d = current.quickSpoolDeltaKpa;
+            // the overshoot is roughly the extra rise while the actuator fills: hand over that much earlier,
+            // but never past a hand-over already seen without overshoot
+            double nd = Math.min(cfg.quickSpoolMaxKpa, Math.round(d + Stats.clamp(ovsMed, cfg.quickSpoolStepKpa, 15)));
+            if (Stats.finite(quickSpoolGood) && quickSpoolGood > d) {
+                nd = Math.min(nd, quickSpoolGood);
+            }
+            boolean blamed = overshootAfterQuickSpool(report.pulls, report.plan.ecu);
+            boolean helped = !Stats.finite(raisedFrom) || ovsMed <= raisedFrom - 2;
+            if (!blamed || !helped) {
+                report.messages.add(!blamed
+                        ? "Overshoot does not follow the quick spool hand-over: left to the spool trim and the gains"
+                        : String.format(Locale.US, "Handing over earlier did not cut the overshoot (%.1f -> %.1f kPa): left to the spool trim and the gains",
+                        raisedFrom, ovsMed));
+            } else if (nd > d + 1e-9) {
+                quickSpoolBad = Stats.finite(quickSpoolBad) ? Math.max(quickSpoolBad, d) : d;
+                next.quickSpoolDeltaKpa = nd;
+                quickSpoolEarlier = true;
+                quickSpoolRaiseOvershoot = ovsMed;
+                report.messages.add(String.format(Locale.US,
+                        "Quick spool hands over earlier: %.0f -> %.0f kPa below the target (overshoot %.1f kPa right after it let go of the valve)",
+                        d, nd, ovsMed));
+            }
+        }
+
         boolean biasSettled = true;
         BiasBuildResult bias = null;
         if (hasFf) {
-            int added = addObservations(report.pulls, cfg.closedLoopObservationWeight, true, cfg.observationDecayPerRun);
+            int added = addObservations(report.pulls, cfg.closedLoopObservationWeight, true, cfg.observationDecayPerRun, report.plan.ecu);
             report.messages.add(added + " steady closed-loop samples added to the plant model");
             report.plantGainKpaPerPct = model.gainKpaPerPct();
-            if (pid.transientOvershoot) {
+            if (quickSpoolEarlier) {
+                // one lever at a time: the hand-over moved, the spool trim waits for the next run
+            } else if (pid.transientOvershoot) {
                 double trimBefore = spoolTrim.max();
                 increaseSpoolTrim(report);
                 if (cfg.fastSpool && trimBefore >= 6) {
@@ -540,7 +639,8 @@ public final class AutotuneSession {
                 allReached = false;
             }
         }
-        boolean baseOk = pid.converged && (allReached || pid.unreachable) && biasSettled && trim.trimmedCells == 0;
+        boolean baseOk = pid.converged && (allReached || pid.unreachable) && biasSettled && trim.trimmedCells == 0
+                && !quickSpoolEarlier && !quickSpoolRestored;
 
         // ---- spool push: the loop is settled and clean, so spend a run on making the target arrive earlier ----
         boolean pushed = false;
@@ -552,6 +652,14 @@ public final class AutotuneSession {
             if (knob != Knob.DONE) {
                 String what;
                 switch (knob) {
+                    case QUICK_SPOOL: {
+                        quickSpoolBeforePush = current.quickSpoolDeltaKpa;
+                        quickSpoolBaselineOvershoot = ovsMed;
+                        next.quickSpoolDeltaKpa = quickSpoolCandidate(current.quickSpoolDeltaKpa);
+                        what = String.format(Locale.US, "quick spool hands over later: %.0f -> %.0f kPa below the target (valve shut longer)",
+                                quickSpoolBeforePush, next.quickSpoolDeltaKpa);
+                        break;
+                    }
                     case TRIM:
                         relaxSpoolTrim(report, 0.5, true);
                         next.biasTable = addGrids(bias.grid, spoolTrim, -1.0, current.minDuty, current.maxDuty);
@@ -586,10 +694,16 @@ public final class AutotuneSession {
                 }
                 pushPending = knob;
                 pushBaselineRpm = reach;
-                pushesInStage++;
                 pushed = true;
                 report.spoolPush = what;
-                report.messages.add(String.format(Locale.US, "Spool push %d/%d: %s", pushesInStage, cfg.maxSpoolPushesPerStage, what));
+                if (knob == Knob.QUICK_SPOOL) {
+                    // the hand-over search has its own budget: it is a bisection, not a step-by-step push
+                    quickSpoolPushes++;
+                    report.messages.add(String.format(Locale.US, "Quick spool push %d/%d: %s", quickSpoolPushes, MAX_QUICK_SPOOL_PUSHES, what));
+                } else {
+                    pushesInStage++;
+                    report.messages.add(String.format(Locale.US, "Spool push %d/%d: %s", pushesInStage, cfg.maxSpoolPushesPerStage, what));
+                }
             }
         }
         if (cfg.fastSpool && Stats.finite(reach)) {
@@ -617,6 +731,7 @@ public final class AutotuneSession {
             if (!allReached && !pid.unreachable) why.add("target not reached in every pull");
             if (!biasSettled) why.add(String.format(Locale.US, "bias table still moving (%.1f%% in measured cells near the target)", focusedBiasChange(report.biasResult)));
             if (trim.trimmedCells > 0) why.add("targets were trimmed");
+            if (quickSpoolEarlier || quickSpoolRestored) why.add("quick spool hand-over moved");
             if (pushed) why.add("spool push to evaluate");
             if (runOk) why.add(String.format(Locale.US, "good run %d of %d in a row", convergedStreak, cfg.runsRequiredPerStage));
             report.messages.add("Stage " + (stageIndex + 1) + " continues: " + join(why));
@@ -644,7 +759,13 @@ public final class AutotuneSession {
     }
 
     private void resetSpoolPush() {
-        knob = Knob.TRIM;
+        knob = Knob.QUICK_SPOOL;
+        quickSpoolBeforePush = Double.NaN;
+        quickSpoolRaiseOvershoot = Double.NaN;
+        quickSpoolGood = Double.NaN;
+        quickSpoolBad = Double.NaN;
+        quickSpoolPushes = 0;
+        quickSpoolBaselineOvershoot = Double.NaN;
         pushPending = null;
         pushBaselineRpm = Double.NaN;
         windowBeforePush = Double.NaN;
@@ -654,6 +775,7 @@ public final class AutotuneSession {
 
     private static Knob nextKnob(Knob k) {
         switch (k) {
+            case QUICK_SPOOL: return Knob.TRIM;
             case TRIM: return Knob.BOOST;
             case BOOST: return Knob.P;
             case P: return Knob.WINDOW;
@@ -677,6 +799,9 @@ public final class AutotuneSession {
 
     private boolean knobApplicable(Knob k, boolean windowBound) {
         switch (k) {
+            case QUICK_SPOOL:
+                return quickSpoolActive() && quickSpoolPushes < MAX_QUICK_SPOOL_PUSHES
+                        && !Double.isNaN(quickSpoolCandidate(current.quickSpoolDeltaKpa));
             case TRIM:
                 return current.hasBiasTable() && spoolTrim != null && spoolTrim.max() > 0.5;
             case BOOST:
@@ -688,6 +813,103 @@ public final class AutotuneSession {
             default:
                 return false;
         }
+    }
+
+    /**
+     * True when most overshooting pulls peak within a second of quick spool letting go of the valve:
+     * then the hand-over is late (the actuator still has to fill), not the bias or the gains.
+     */
+    private boolean overshootAfterQuickSpool(List<Pull> pulls, EcuState run) {
+        if (run == null || !Boolean.TRUE.equals(run.quickSpoolOn) || !Stats.finite(run.quickSpoolDeltaKpa)) {
+            return false;
+        }
+        int over = 0;
+        int after = 0;
+        for (Pull p : pulls) {
+            List<Sample> ss = p.samples();
+            int pk = -1;
+            for (int k = 0; k < ss.size(); k++) {
+                Sample x = ss.get(k);
+                if (Stats.finite(x.map) && Stats.finite(x.target) && (pk < 0 || x.map - x.target > ss.get(pk).map - ss.get(pk).target)) {
+                    pk = k;
+                }
+            }
+            if (pk < 0 || ss.get(pk).map - ss.get(pk).target < cfg.overshootThresholdKpa) {
+                continue;
+            }
+            over++;
+            double peakTime = ss.get(pk).timeSec;
+            for (int k = pk; k >= 0; k--) {
+                Sample x = ss.get(k);
+                if (Stats.finite(x.target) && x.map < x.target - run.quickSpoolDeltaKpa + 1
+                        && x.duty >= run.maxDuty - cfg.saturationDutyMarginPct) {
+                    if (peakTime - x.timeSec <= 1.0) {
+                        after++;
+                    }
+                    break;
+                }
+            }
+        }
+        return over > 0 && after * 2 >= over;
+    }
+
+    /**
+     * Next hand-over to try, later than {@code from}: halfway to the earliest one seen overshooting,
+     * or halfway to the minimum while none has. NaN when the gap is down to one step.
+     */
+    private double quickSpoolCandidate(double from) {
+        double good = Stats.finite(quickSpoolGood) ? Math.min(quickSpoolGood, from) : from;
+        boolean bounded = Stats.finite(quickSpoolBad) && quickSpoolBad < good;
+        double lo = bounded ? quickSpoolBad : cfg.quickSpoolMinKpa;
+        if (good - lo <= cfg.quickSpoolStepKpa + 1e-9) {
+            return Double.NaN;
+        }
+        double c = bounded ? (good + lo) / 2 : good - Math.max(cfg.quickSpoolStepKpa, (good - lo) / 2);
+        c = Math.max(cfg.quickSpoolMinKpa, Math.round(c));
+        if (c >= good - 0.5 || (bounded && c <= quickSpoolBad + 0.5)) {
+            return Double.NaN;
+        }
+        return c;
+    }
+
+    /** The session drives the ECU quick spool in this closed-loop run. */
+    private boolean quickSpoolActive() {
+        return quickSpoolTuned && Boolean.TRUE.equals(current.quickSpoolOn) && Stats.finite(current.quickSpoolDeltaKpa);
+    }
+
+    private double startQuickSpoolDelta() {
+        return Stats.clamp(Stats.finite(quickSpoolOriginalDelta) ? quickSpoolOriginalDelta : cfg.quickSpoolStartKpa,
+                cfg.quickSpoolMinKpa, cfg.quickSpoolMaxKpa);
+    }
+
+    /** Open-loop runs: quick spool would hold the valve shut whatever the planned duty says. */
+    private static void quickSpoolOff(EcuState e) {
+        if (e.hasQuickSpool()) {
+            e.quickSpoolOn = Boolean.FALSE;
+        }
+    }
+
+    /** Closed loop: quick spool on with the tuned hand-over, or as the ECU had it. */
+    private void quickSpoolForClosedLoop() {
+        if (!current.hasQuickSpool()) {
+            return;
+        }
+        if (quickSpoolTuned) {
+            current.quickSpoolOn = Boolean.TRUE;
+            current.quickSpoolDeltaKpa = startQuickSpoolDelta();
+        } else {
+            current.quickSpoolOn = quickSpoolOriginal;
+            current.quickSpoolDeltaKpa = quickSpoolOriginalDelta;
+        }
+    }
+
+    /** Quick spool as a plan note. */
+    private static String quickSpoolNote(EcuState e, double target) {
+        if (Boolean.TRUE.equals(e.quickSpoolOn) && Stats.finite(e.quickSpoolDeltaKpa)) {
+            return String.format(Locale.US, "Quick spool on: valve held shut up to %.0f kPa (%.0f below the target), then the closed loop",
+                    target - e.quickSpoolDeltaKpa, e.quickSpoolDeltaKpa);
+        }
+        return "Quick spool " + (Boolean.TRUE.equals(e.quickSpoolOn) ? "on" : "off") + " as set in the ECU";
     }
 
     private static String fmt(double v) {
@@ -704,8 +926,13 @@ public final class AutotuneSession {
      * region the turbo makes noticeably more boost a few hundred RPM later, and an optimistic ceiling
      * would make the loop wind up. Returns true when a column grew.
      */
-    private boolean updateCeiling(List<Pull> pulls) {
+    private boolean updateCeiling(List<Pull> pulls, EcuState run) {
         if (ceilingShut == null) {
+            return false;
+        }
+        // with quick spool on the ECU itself holds the valve shut while the target is out of reach, and
+        // its holds (maximum duty a plant lag before a boost peak) would read as a low turbo ceiling
+        if (run != null && Boolean.TRUE.equals(run.quickSpoolOn)) {
             return false;
         }
         Axis ax = model.rpmAxis();
@@ -789,10 +1016,14 @@ public final class AutotuneSession {
             next.openLoopTable = TargetTableBuilder.buildOpenLoopDuty(current.openLoopTable, current.minDuty, cfg,
                     current.minDuty, current.maxDuty);
             next.closedLoop = false;
+            quickSpoolOff(next);
             RunPlan p = new RunPlan(runNumber + 1, SessionPhase.CHARACTERIZE, 0, cfg.targetStagesKpa.get(0), current.minDuty, next);
             p.springRun = true;
             p.gear = cfg.gear;
             p.notes.add("Measures the wastegate spring pressure: the open-loop ladder starts after it");
+            if (next.hasQuickSpool()) {
+                p.notes.add("Quick spool off for this run: it would hold the valve shut");
+            }
             return p;
         }
         DutyLadder.Step step = DutyLadder.next(model, cfg, current.minDuty, current.maxDuty, ladderDuties, Double.NaN);
@@ -800,9 +1031,13 @@ public final class AutotuneSession {
         next.openLoopTable = TargetTableBuilder.buildOpenLoopDuty(current.openLoopTable, step.duty, cfg,
                 current.minDuty, current.maxDuty);
         next.closedLoop = false;
+        quickSpoolOff(next);
         RunPlan p = new RunPlan(runNumber + 1, SessionPhase.CHARACTERIZE, 0, cfg.targetStagesKpa.get(0), step.duty, next);
         p.gear = cfg.gear;
         p.notes.add(step.reason);
+        if (next.hasQuickSpool()) {
+            p.notes.add("Quick spool off for this run: the valve must follow the planned duty");
+        }
         return p;
     }
 
@@ -825,6 +1060,9 @@ public final class AutotuneSession {
             }
             if (cfg.softStartClosedLoop && closedLoopRunsInStage == 0 && stageIndex == 0) {
                 p.notes.add("Soft start: I and D halved for the first closed-loop run");
+            }
+            if (next.hasQuickSpool()) {
+                p.notes.add(quickSpoolNote(next, target));
             }
             if (next.hasBiasTable() && (target > next.biasTable.yAxis().max() || target < next.biasTable.yAxis().min())) {
                 p.notes.add(String.format(Locale.US,
@@ -850,8 +1088,9 @@ public final class AutotuneSession {
      * winding up the duty says nothing about steady state. Columns that receive fresh data are
      * aged first so recent evidence wins; untouched columns keep their characterization data.
      */
-    private int addObservations(List<Pull> pulls, double weight, boolean closedLoop, double decayFactor) {
+    private int addObservations(List<Pull> pulls, double weight, boolean closedLoop, double decayFactor, EcuState run) {
         List<double[]> obs = new ArrayList<double[]>(); // {rpm, duty, map}
+        boolean quickSpoolHolds = run != null && Boolean.TRUE.equals(run.quickSpoolOn);
         for (Pull p : pulls) {
             List<Sample> ss = p.samples();
             double settledFrom = Double.NEGATIVE_INFINITY;
@@ -879,6 +1118,10 @@ public final class AutotuneSession {
                 Sample cause = laggedSample(ss, k);
                 if (cause == null) {
                     continue;
+                }
+                if (quickSpoolHolds && Stats.finite(cause.target) && cause.map < cause.target - 1
+                        && cause.duty >= current.maxDuty - cfg.saturationDutyMarginPct) {
+                    continue; // quick spool held the valve shut: not what the turbo does at that duty
                 }
                 obs.add(new double[]{cause.rpm, cause.duty, s.map});
             }

@@ -16,6 +16,14 @@ public final class SimEcu {
     private double lastError = Double.NaN;
     private double lastDuty;
     public double lowerLimitDeltaKpa = 30;
+    /**
+     * After a quick spool hold the wastegate actuator has to fill before the valve cracks open:
+     * for this long the valve stays shut although the ECU already handed over. This is what makes
+     * a late hand-over overshoot on a real car.
+     */
+    public double quickSpoolReleaseSec = 0.15;
+    private boolean quickSpoolHolding;
+    private double quickSpoolReleaseLeft;
     public double wotTps = 85;
     /** Physical gain at P=100: percent duty per kPa of error. */
     public double pScale = 0.006;
@@ -198,6 +206,8 @@ public final class SimEcu {
         }
         integral = 0;
         lastError = Double.NaN;
+        quickSpoolHolding = false;
+        quickSpoolReleaseLeft = 0;
     }
 
     public EcuState state() {
@@ -215,6 +225,28 @@ public final class SimEcu {
     public void resetController() {
         integral = 0;
         lastError = Double.NaN;
+        quickSpoolHolding = false;
+        quickSpoolReleaseLeft = 0;
+    }
+
+    /**
+     * Quick spool, open or closed loop alike (that is why the autotune switches it off for its
+     * open-loop runs): the ECU commands maximum duty while boost is more than the hand-over below
+     * the target. Returns true while it holds the valve.
+     */
+    private boolean quickSpoolHolds(double rpm, double tps, double map) {
+        if (!Boolean.TRUE.equals(state.quickSpoolOn) || Double.isNaN(state.quickSpoolDeltaKpa) || state.targetTable == null) {
+            return false;
+        }
+        if (map < target(rpm, tps) - state.quickSpoolDeltaKpa) {
+            quickSpoolHolding = true;
+            quickSpoolReleaseLeft = 0;
+        } else if (quickSpoolHolding) {
+            // handed over: the ECU's duty drops at once, the actuator still has to fill
+            quickSpoolHolding = false;
+            quickSpoolReleaseLeft = quickSpoolReleaseSec;
+        }
+        return quickSpoolHolding;
     }
 
     public double camAngle() {
@@ -352,7 +384,10 @@ public final class SimEcu {
         return f;
     }
 
-    /** One control step; returns the duty. */
+    /**
+     * One control step; returns the duty the valve actually sees. {@link #lastDuty()} is what the
+     * ECU commands (and logs): the two differ while the actuator fills after a quick spool hold.
+     */
     public double control(double rpm, double tps, double map, double dt) {
         if (tps < wotTps) {
             resetController();
@@ -360,7 +395,11 @@ public final class SimEcu {
             return lastDuty;
         }
         double duty;
-        if (!state.closedLoop) {
+        if (quickSpoolHolds(rpm, tps, map)) {
+            integral = 0;
+            lastError = Double.NaN;
+            duty = state.maxDuty;
+        } else if (!state.closedLoop) {
             Grid ol = state.openLoopTable;
             duty = ol == null ? state.minDuty : ol.lookup(rpm, tps);
         } else {
@@ -385,6 +424,10 @@ public final class SimEcu {
             }
         }
         lastDuty = Stats.clamp(duty, state.minDuty, state.maxDuty);
+        if (quickSpoolReleaseLeft > 0) {
+            quickSpoolReleaseLeft = Math.max(0, quickSpoolReleaseLeft - dt);
+            return state.maxDuty;
+        }
         return lastDuty;
     }
 }

@@ -6,6 +6,7 @@ import io.github.xadmiral.boostautotune.plugin.ecu.EcuBinding;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuException;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuPort;
 import io.github.xadmiral.boostautotune.plugin.ecu.EcuPresets;
+import io.github.xadmiral.boostautotune.plugin.ecu.QuickSpoolFinder;
 import io.github.xadmiral.boostautotune.plugin.ecu.TableOrientation;
 
 import javax.swing.BorderFactory;
@@ -95,6 +96,10 @@ public final class SetupPanel extends JPanel {
             new Row("closedLoopOption", "  ... closed-loop option text", "text"),
             new Row("closedLoopExtraParam", "Extra parameter set when closing the loop", "param"),
             new Row("closedLoopExtraOption", "  ... its option text", "text"),
+            new Row("quickSpoolParam", "Quick spool switch (optional, found by name when empty)", "param"),
+            new Row("quickSpoolOnOption", "  ... option meaning ON", "text"),
+            new Row("quickSpoolKpaParam", "Quick spool hand-over, kPa (optional)", "param"),
+            new Row("quickSpoolKpaMeaning", "  ... reads as: auto / below target / absolute", "text"),
             new Row("fuelLoadChannel", "Fuel load channel (VVT table Y axis)", "channel"),
             new Row("vvtAngleChannel", "VVT cam angle channel", "channel"),
             new Row("vvtTargetChannel", "VVT target channel", "channel"),
@@ -352,6 +357,13 @@ public final class SetupPanel extends JPanel {
                 refined++;
             }
         }
+        // quick spool: no preset knows its names, the INI does
+        QuickSpoolFinder.Result qs = QuickSpoolFinder.find(port, currentConfig());
+        if (qs.found()) {
+            binding.quickSpoolParam = qs.switchParam;
+            binding.quickSpoolOnOption = qs.onOption;
+            binding.quickSpoolKpaParam = qs.kpaParam;
+        }
         // fuzzy fallbacks for channels that differ between INI versions
         if (!channels.contains(binding.cltChannel)) {
             String alt = EcuPresets.find(channels, "coolant");
@@ -367,6 +379,7 @@ public final class SetupPanel extends JPanel {
         if (refined > 0) {
             sb.append(refined).append(" table axis bindings taken from the INI table definitions\n");
         }
+        sb.append("Quick spool: ").append(qs.describe()).append('\n');
         if (!tables.isEmpty()) {
             sb.append("Boost / VVT / spark / anti-lag tables in this INI:\n");
             for (EcuPort.UiTableInfo t : tables) {
@@ -442,6 +455,7 @@ public final class SetupPanel extends JPanel {
             {"modeParam", "openLoopOption", "Open-loop option"},
             {"modeParam", "closedLoopOption", "Closed-loop option"},
             {"closedLoopExtraParam", "closedLoopExtraOption", "Extra closed-loop option"},
+            {"quickSpoolParam", "quickSpoolOnOption", "Quick spool ON option"},
             {"idleTypeParam", "idleTypeStepperOption", "Idle valve stepper option"},
             {"alsEnableParam", "alsDisableOption", "Anti-lag OFF option"},
             {"dbwEnableParam", "dbwEnableOption", "Drive-by-wire ON option"},

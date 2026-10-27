@@ -24,6 +24,14 @@ public final class EcuState {
     public double targetTableMax = 400;
     /** Closed-loop activation window below the target (MS3 "lower limit delta"), kPa; NaN when not bound. */
     public double closedLoopWindowKpa = Double.NaN;
+    /**
+     * ECU quick spool: the valve is held shut until boost comes within {@link #quickSpoolDeltaKpa}
+     * of the target, then the closed loop takes over. Null when the ECU has no quick spool (or it is
+     * not bound); the session switches it off for open-loop runs and tunes the hand-over.
+     */
+    public Boolean quickSpoolOn;
+    /** Quick spool hand-over point as kPa below the target; NaN when not bound or not understood. */
+    public double quickSpoolDeltaKpa = Double.NaN;
 
     public EcuState copy() {
         EcuState c = new EcuState();
@@ -38,11 +46,18 @@ public final class EcuState {
         c.closedLoop = closedLoop;
         c.targetTableMax = targetTableMax;
         c.closedLoopWindowKpa = closedLoopWindowKpa;
+        c.quickSpoolOn = quickSpoolOn;
+        c.quickSpoolDeltaKpa = quickSpoolDeltaKpa;
         return c;
     }
 
     public boolean hasBiasTable() {
         return biasTable != null;
+    }
+
+    /** True when the ECU has a quick spool switch the session can turn on and off. */
+    public boolean hasQuickSpool() {
+        return quickSpoolOn != null;
     }
 
     public boolean hasOpenLoopTable() {

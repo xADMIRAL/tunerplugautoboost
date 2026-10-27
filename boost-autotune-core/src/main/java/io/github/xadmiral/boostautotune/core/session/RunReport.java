@@ -86,6 +86,12 @@ public final class RunReport {
         for (String m : messages) {
             sb.append("  ").append(m).append('\n');
         }
+        if (nextPlan != null && nextPlan.ecu != null && nextPlan.ecu.hasQuickSpool()) {
+            EcuState q = nextPlan.ecu;
+            sb.append(Boolean.TRUE.equals(q.quickSpoolOn) && !Double.isNaN(q.quickSpoolDeltaKpa)
+                    ? String.format(Locale.US, "  Quick spool for the next run: on, hands over %.0f kPa below the target\n", q.quickSpoolDeltaKpa)
+                    : "  Quick spool for the next run: " + (Boolean.TRUE.equals(q.quickSpoolOn) ? "on" : "off") + "\n");
+        }
         if (nextPlan != null) {
             sb.append("Next: ").append(nextPlan.title()).append('\n');
             for (String n : nextPlan.notes) {
