@@ -87,20 +87,28 @@ class LayoutHeadlessTest {
                 // boost tab: the settings form fits half of a modest window even at the largest text
                 assertTrue(p.targetsPanel().formPreferredWidth() <= 620,
                         String.format("scale %.2f: boost settings form is %d px wide", sc, p.targetsPanel().formPreferredWidth()));
-                JPanel row = a.buttonRow();
-                Component[] kids = row.getComponents();
-                for (int i = 0; i < kids.length; i++) {
-                    if (!kids[i].isVisible()) {
-                        continue;
-                    }
-                    Rectangle ri = kids[i].getBounds();
-                    assertTrue(ri.height > 0 && ri.width > 0, "button without size: " + kids[i]);
-                    assertTrue(ri.y + ri.height <= row.getHeight() + 1, String.format("scale %.2f width %d: control '%s' sticks out of its row",
-                            sc, width, kids[i] instanceof JButton ? ((JButton) kids[i]).getText() : kids[i].getClass().getSimpleName()));
-                    for (int j = i + 1; j < kids.length; j++) {
-                        if (kids[j].isVisible()) {
-                            assertFalse(ri.intersects(kids[j].getBounds()), String.format("scale %.2f width %d: controls %d and %d overlap", sc, width, i, j));
+                for (JPanel row : new JPanel[]{a.buttonRow(), a.secondaryRow()}) {
+                    Component[] kids = row.getComponents();
+                    for (int i = 0; i < kids.length; i++) {
+                        if (!kids[i].isVisible()) {
+                            continue;
                         }
+                        Rectangle ri = kids[i].getBounds();
+                        assertTrue(ri.height > 0 && ri.width > 0, "button without size: " + kids[i]);
+                        assertTrue(ri.y + ri.height <= row.getHeight() + 1, String.format("scale %.2f width %d: control '%s' sticks out of its row",
+                                sc, width, kids[i] instanceof JButton ? ((JButton) kids[i]).getText() : kids[i].getClass().getSimpleName()));
+                        for (int j = i + 1; j < kids.length; j++) {
+                            if (kids[j].isVisible()) {
+                                assertFalse(ri.intersects(kids[j].getBounds()), String.format("scale %.2f width %d: controls %d and %d overlap", sc, width, i, j));
+                            }
+                        }
+                    }
+                }
+                // the step bar never stacks its labels on each other
+                Component[] steps = a.stepsBar().getComponents();
+                for (int i = 0; i < steps.length; i++) {
+                    for (int j = i + 1; j < steps.length; j++) {
+                        assertFalse(steps[i].getBounds().intersects(steps[j].getBounds()), String.format("scale %.2f width %d: steps overlap", sc, width));
                     }
                 }
             }
@@ -144,8 +152,9 @@ class LayoutHeadlessTest {
                         live[i].getText(), live[i].getForeground(), cells[i].getBackground(), contrast));
             }
             JLabel state = a.stateLabel();
-            double contrast = Math.abs(Palette.luminance(state.getForeground()) - Palette.luminance(dark));
-            assertTrue(contrast > 0.5, "state line " + state.getForeground() + " on the dark panel");
+            java.awt.Color behind = state.isOpaque() ? state.getBackground() : dark;
+            double contrast = Math.abs(Palette.luminance(state.getForeground()) - Palette.luminance(behind));
+            assertTrue(contrast > 0.5, "state pill " + state.getForeground() + " on " + behind);
             SwingUtilities.invokeAndWait(new Runnable() {
                 public void run() {
                     holder[0].dispose();

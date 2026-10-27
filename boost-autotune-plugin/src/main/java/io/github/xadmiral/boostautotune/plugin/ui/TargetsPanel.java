@@ -44,6 +44,7 @@ public final class TargetsPanel extends JPanel {
         this.onChanged = onChanged;
         setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
 
+        form.addAdvancedToggle();
         form.section("Targets");
         stagesField = form.addText("Target stages, kPa absolute (comma separated)",
                 "Each stage is tuned to convergence before the next one starts, e.g. 150, 170",
@@ -59,10 +60,14 @@ public final class TargetsPanel extends JPanel {
                 new Form.DoubleGet() { public double get() { return cfg.fullTargetRpm; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.fullTargetRpm = v; } });
 
-        form.section("Spool");
+        form.addDouble("Hard limit, kPa", "Any sample above this aborts the session and forces a safe duty. Keep it below the ECU overboost cut.",
+                new Form.DoubleGet() { public double get() { return cfg.maxBoostKpa; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.maxBoostKpa = v; } });
         form.addBool("Fastest spool to target", "Valve held shut wherever the target is out of reach, flat target instead of the ramp, then trim / feed-forward / P / closed-loop window are pushed while the target keeps arriving earlier without overshoot",
                 new Form.BoolGet() { public boolean get() { return cfg.fastSpool; } },
                 new Form.BoolSet() { public void set(boolean v) { cfg.fastSpool = v; } });
+        form.beginAdvanced();
+        form.section("Spool");
         form.addDouble("Valve counts as shut above, % duty", "A bias cell whose estimate asks for at least this much duty is written as maximum duty",
                 new Form.DoubleGet() { public double get() { return cfg.spoolShutDutyPct; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.spoolShutDutyPct = v; } });
@@ -101,9 +106,6 @@ public final class TargetsPanel extends JPanel {
                 new Form.DoubleSet() { public void set(double v) { cfg.partThrottleFloorKpa = v; } });
 
         form.section("Safety");
-        form.addDouble("Hard limit, kPa", "Any sample above this aborts the session and forces a safe duty. Keep it below the ECU overboost cut.",
-                new Form.DoubleGet() { public double get() { return cfg.maxBoostKpa; } },
-                new Form.DoubleSet() { public void set(double v) { cfg.maxBoostKpa = v; } });
         form.addDouble("Prediction margin, kPa", "Open-loop ladder never plans a duty predicted above hard limit minus this",
                 new Form.DoubleGet() { public double get() { return cfg.predictionMarginKpa; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.predictionMarginKpa = v; } });

@@ -48,6 +48,7 @@ public final class KnockPanel extends JPanel {
         top.add(acknowledge, BorderLayout.SOUTH);
         add(top, BorderLayout.NORTH);
 
+        form.addAdvancedToggle();
         form.section("What you want");
         form.addDouble("Noise level at the noisiest RPM, % of full scale", "The loudest bin's 95th percentile after the gains are set (MS3: about 30-50 % leaves room for knock)",
                 new Form.DoubleGet() { public double get() { return cfg.noiseTargetPct; } },
@@ -67,6 +68,7 @@ public final class KnockPanel extends JPanel {
                 new Form.DoubleGet() { public double get() { return cfg.cylinderImbalancePct; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.cylinderImbalancePct = v; } });
 
+        form.beginAdvanced();
         form.section("Which samples count");
         form.addBool("Load and RPM window from the ECU's knock settings", "knk_minload / knk_lorpm / knk_hirpm on MS3; the fields below are used when off or unbound",
                 new Form.BoolGet() { public boolean get() { return cfg.windowFromEcu; } },

@@ -34,6 +34,10 @@ names preset. Best-effort presets exist for stock MS3 1.5+, Speeduino and rusEFI
    A rise bump that survives a deep trim gets anticipation (D up, I down) and a narrower window.
    In the simulator 170 kPa arrives about 230 rpm earlier than with the ramp.
 
+**Layout.** The Autotune tab shows a coloured state pill and a step bar (Start session › Write plan
+› Start run › End run › Apply & next) with the current step and the button to press next
+highlighted. Every settings tab shows only the mode's goals until *Advanced settings* is ticked.
+
 **Live values and progress.** The live row works from the moment the plugin opens: the bound
 channels are subscribed right away, and when TunerStudio's callbacks stay silent for a second the
 plugin polls the channels itself (20 Hz). The bold progress line under the plan says what is going

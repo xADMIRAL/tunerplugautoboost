@@ -48,6 +48,7 @@ public final class IgnitionPanel extends JPanel {
         top.add(acknowledge, BorderLayout.SOUTH);
         add(top, BorderLayout.NORTH);
 
+        form.addAdvancedToggle();
         form.section("Sweep");
         form.addText("Candidate offsets, deg (must include 0)", "Negative = retard, positive = advance",
                 new Form.TextGet() { public String get() { return SettingsStore.joinDoubles(sweep.candidateOffsets); } },
@@ -64,6 +65,7 @@ public final class IgnitionPanel extends JPanel {
                 new Form.DoubleSet() { public void set(double v) { sweep.maxRpm = v; } });
         form.addDouble("Gear (0 = any)", "", new Form.DoubleGet() { public double get() { return sweep.gear; } },
                 new Form.DoubleSet() { public void set(double v) { sweep.gear = (int) v; } });
+        form.beginAdvanced();
         form.addDouble("Min torque gain to change a cell, %", "",
                 new Form.DoubleGet() { public double get() { return sweep.minGainPct; } },
                 new Form.DoubleSet() { public void set(double v) { sweep.minGainPct = v; } });
@@ -74,10 +76,12 @@ public final class IgnitionPanel extends JPanel {
                 new Form.DoubleGet() { public double get() { return sweep.smoothingMaxStepDeg; } },
                 new Form.DoubleSet() { public void set(double v) { sweep.smoothingMaxStepDeg = v; } });
 
+        form.endAdvanced();
         form.section("Limits and guards");
         form.addDouble("Max advance over original in this session, deg", "Hard cap on how far any cell may be advanced",
                 new Form.DoubleGet() { public double get() { return sweep.maxAdvanceOverOriginalDeg; } },
                 new Form.DoubleSet() { public void set(double v) { sweep.maxAdvanceOverOriginalDeg = v; } });
+        form.beginAdvanced();
         form.addDouble("Absolute maximum advance, deg", "", new Form.DoubleGet() { public double get() { return sweep.absoluteMax; } },
                 new Form.DoubleSet() { public void set(double v) { sweep.absoluteMax = v; } });
         form.addDouble("Absolute minimum advance, deg", "", new Form.DoubleGet() { public double get() { return sweep.absoluteMin; } },

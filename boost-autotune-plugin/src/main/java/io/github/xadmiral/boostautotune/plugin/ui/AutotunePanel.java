@@ -19,7 +19,6 @@ import javax.swing.JTextArea;
 import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -29,11 +28,17 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.Locale;
 
-/** The driver's cockpit: mode, state, live values, run control. */
+/**
+ * The driver's cockpit: mode, a state pill, the five steps of a session with the current one
+ * highlighted, the live values, and two rows of buttons: the main ones (the next thing to press
+ * gets an accent frame) and the rest.
+ */
 public final class AutotunePanel extends JPanel {
     private final TuneController ctl;
     private final JComboBox<TuneMode> modeCombo = new JComboBox<TuneMode>(TuneMode.values());
     private final JLabel stateLabel = new JLabel(" ");
+    private final JLabel phaseLabel = new JLabel(" ");
+    private final Ui.Steps steps = new Ui.Steps("Start session", "Write plan", "Start run", "End run", "Apply & next");
     private final JLabel planLabel = new JLabel(" ");
     private final JTextArea progressLabel = new JTextArea(" ");
     private final JTextArea instructions = new JTextArea(2, 60);
@@ -58,32 +63,42 @@ public final class AutotunePanel extends JPanel {
     private final JButton simAls = new JButton("Simulate anti-lag (3 lifts)");
     private final JCheckBox autoEnd = new JCheckBox("Auto end run", true);
     private final JCheckBox autoApply = new JCheckBox("Auto apply & prepare next", false);
+    private final JButton[] primaries;
     private final Runnable beforeStart;
     private final Timer refresh;
-    private JPanel buttonRow;
+    private final JPanel buttonRow;
+    private final JPanel secondaryRow;
 
     public AutotunePanel(final TuneController ctl, Runnable beforeStart) {
         super(new BorderLayout(6, 6));
         this.ctl = ctl;
         this.beforeStart = beforeStart;
-        setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+        setBorder(Ui.tabPadding());
+        primaries = new JButton[]{startSession, writePlan, startRun, endRun, applyNext, burn, restore};
 
-        // a vertical stack that gives every row its preferred height: no maximum sizes, nothing gets
-        // squeezed when the text is large or the window narrow
+        // a vertical stack that gives every row its preferred height: nothing gets squeezed when the
+        // text is large or the window narrow
         JPanel top = new JPanel(new GridBagLayout());
         GridBagConstraints gc = new GridBagConstraints();
         gc.gridx = 0;
         gc.weightx = 1;
         gc.fill = GridBagConstraints.HORIZONTAL;
         gc.anchor = GridBagConstraints.WEST;
-        gc.insets = new Insets(0, 0, 2, 0);
+        gc.insets = new Insets(0, 0, 3, 0);
         JPanel modeRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 2));
-        modeRow.add(new JLabel("Mode:"));
+        JLabel modeCaption = new JLabel("Mode");
+        modeCaption.setFont(modeCaption.getFont().deriveFont(Font.BOLD));
+        modeRow.add(modeCaption);
         modeRow.add(modeCombo);
         modeRow.add(startSession);
         top.add(modeRow, gc);
-        stateLabel.setFont(stateLabel.getFont().deriveFont(Font.BOLD, 15f));
-        top.add(stateLabel, gc);
+        JPanel stateRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 2));
+        stateLabel.setFont(stateLabel.getFont().deriveFont(Font.BOLD, 14f));
+        stateRow.add(stateLabel);
+        phaseLabel.setForeground(Palette.dimTextOn(Palette.panel()));
+        stateRow.add(phaseLabel);
+        top.add(stateRow, gc);
+        top.add(steps, gc);
         top.add(planLabel, gc);
         // a wrapping line: the waiting / silent-channel hints are long and must stay readable
         progressLabel.setEditable(false);
@@ -95,7 +110,8 @@ public final class AutotunePanel extends JPanel {
         instructions.setEditable(false);
         instructions.setLineWrap(true);
         instructions.setWrapStyleWord(true);
-        instructions.setBackground(getBackground());
+        instructions.setOpaque(false);
+        instructions.setForeground(Palette.text());
         top.add(instructions, gc);
 
         // the live cells paint their own background and text colours: the host's theme (TunerStudio is
@@ -109,44 +125,56 @@ public final class AutotunePanel extends JPanel {
             cell.setBackground(card);
             cell.setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createLineBorder(Palette.dimTextOn(card), 1),
-                    BorderFactory.createEmptyBorder(2, 6, 2, 6)));
+                    BorderFactory.createEmptyBorder(3, 8, 3, 8)));
             JLabel n = new JLabel(LIVE_NAMES[i]);
             n.setFont(n.getFont().deriveFont(10f));
             n.setForeground(Palette.dimTextOn(card));
             live[i] = new JLabel("-");
-            live[i].setFont(live[i].getFont().deriveFont(Font.BOLD, 15f));
+            live[i].setFont(live[i].getFont().deriveFont(Font.BOLD, 16f));
             live[i].setForeground(Palette.textOn(card));
             cell.add(n, BorderLayout.NORTH);
             cell.add(live[i], BorderLayout.CENTER);
             liveCells[i] = cell;
             liveRow.add(cell);
         }
-        liveRow.setBorder(BorderFactory.createTitledBorder("Live"));
-        top.add(liveRow, gc);
+        JPanel liveBox = new JPanel(new BorderLayout());
+        liveBox.add(Ui.sectionHeader("Live"), BorderLayout.NORTH);
+        liveBox.add(liveRow, BorderLayout.CENTER);
+        top.add(liveBox, gc);
         add(top, BorderLayout.NORTH);
 
-        JPanel buttons = new JPanel(new WrapLayout(FlowLayout.LEFT, 5, 4));
-        for (JButton b : new JButton[]{writePlan, startRun, endRun, applyNext, repeat, abort, restore, burn}) {
-            buttons.add(b);
+        buttonRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 4));
+        for (JButton b : new JButton[]{writePlan, startRun, endRun, applyNext}) {
+            buttonRow.add(b);
         }
-        buttons.add(autoEnd);
-        buttons.add(autoApply);
+        secondaryRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 4));
+        for (JButton b : new JButton[]{repeat, abort, restore, burn}) {
+            secondaryRow.add(b);
+        }
+        secondaryRow.add(autoEnd);
+        secondaryRow.add(autoApply);
         boolean demo = ctl.port() instanceof SimEcuPort;
-        simPull3.setVisible(demo);
-        simPull4.setVisible(demo);
-        simDrive.setVisible(demo);
-        buttons.add(simPull3);
-        buttons.add(simPull4);
-        buttons.add(simDrive);
-        simAls.setVisible(demo);
-        buttons.add(simAls);
+        for (JButton b : new JButton[]{simPull3, simPull4, simDrive, simAls}) {
+            b.setVisible(demo);
+            secondaryRow.add(b);
+        }
 
         report.setEditable(false);
         report.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        buttonRow = buttons;
         JPanel center = new JPanel(new BorderLayout());
-        center.add(buttons, BorderLayout.NORTH);
-        center.add(new JScrollPane(report), BorderLayout.CENTER);
+        JPanel rows = new JPanel(new GridBagLayout());
+        GridBagConstraints rc = new GridBagConstraints();
+        rc.gridx = 0;
+        rc.weightx = 1;
+        rc.fill = GridBagConstraints.HORIZONTAL;
+        rc.anchor = GridBagConstraints.WEST;
+        rows.add(buttonRow, rc);
+        rows.add(secondaryRow, rc);
+        center.add(rows, BorderLayout.NORTH);
+        JPanel reportBox = new JPanel(new BorderLayout());
+        reportBox.add(Ui.sectionHeader("Last run report"), BorderLayout.NORTH);
+        reportBox.add(new JScrollPane(report), BorderLayout.CENTER);
+        center.add(reportBox, BorderLayout.CENTER);
         add(center, BorderLayout.CENTER);
 
         startSession.addActionListener(new ActionListener() {
@@ -261,8 +289,18 @@ public final class AutotunePanel extends JPanel {
         return liveCells;
     }
 
+    /** The row with the main run buttons. */
     public JPanel buttonRow() {
         return buttonRow;
+    }
+
+    /** The row with the rest: repeat, abort, undo, burn, automation and the demo buttons. */
+    public JPanel secondaryRow() {
+        return secondaryRow;
+    }
+
+    public Ui.Steps stepsBar() {
+        return steps;
     }
 
     public TuneMode selectedMode() {
@@ -278,12 +316,27 @@ public final class AutotunePanel extends JPanel {
         report.setCaretPosition(0);
     }
 
+    /** Which of the five steps is the one to do now; 5 = all done. */
+    private int currentStep(SessionState st) {
+        if (ctl.driver() == null || st == SessionState.ABORTED) {
+            return 0;
+        }
+        switch (st) {
+            case READY: return ctl.isEcuPrepared() ? 2 : 1;
+            case RECORDING: return 3;
+            case REVIEW: return 4;
+            case DONE: return 5;
+            default: return 0;
+        }
+    }
+
     public void updateState() {
         SessionState st = ctl.state();
-        String phase = ctl.driver() == null ? "" : " / " + ctl.phase();
-        stateLabel.setText("State: " + st + phase + (st == SessionState.ABORTED ? " - " + ctl.abortReason() : ""));
-        Color bg = Palette.panel();
-        stateLabel.setForeground(st == SessionState.ABORTED ? Palette.badOn(bg) : st == SessionState.DONE ? Palette.goodOn(bg) : Palette.text());
+        Ui.pill(stateLabel, st.name(), Ui.stateColor(st));
+        String phase = ctl.driver() == null ? "" : ctl.phase();
+        phaseLabel.setText(st == SessionState.ABORTED ? "Aborted: " + ctl.abortReason() : phase);
+        phaseLabel.setForeground(st == SessionState.ABORTED ? Palette.badOn(Palette.panel()) : Palette.dimTextOn(Palette.panel()));
+        steps.setActive(currentStep(st));
         if (ctl.driver() == null) {
             planLabel.setText("Pick a mode, check its settings tab and Setup, then press Start session.");
             instructions.setText("");
@@ -314,6 +367,27 @@ public final class AutotunePanel extends JPanel {
         simPull4.setEnabled(st == SessionState.RECORDING && !vvtPid && !als);
         simDrive.setEnabled(st == SessionState.RECORDING && vvtPid);
         simAls.setEnabled(st == SessionState.RECORDING && als);
+        // the next thing to press gets the accent frame
+        JButton next;
+        if (!hasSession) {
+            next = startSession;
+        } else {
+            switch (st) {
+                case READY: next = ctl.isEcuPrepared() ? startRun : writePlan; break;
+                case RECORDING: next = endRun; break;
+                case REVIEW: next = applyNext; break;
+                case DONE: next = burn; break;
+                case ABORTED: next = ctl.hasOriginal() ? restore : startSession; break;
+                default: next = startSession;
+            }
+        }
+        for (JButton b : primaries) {
+            if (b == next) {
+                Ui.primary(b);
+            } else {
+                Ui.secondary(b);
+            }
+        }
     }
 
     private void refreshLive() {

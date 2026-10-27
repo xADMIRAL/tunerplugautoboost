@@ -30,16 +30,87 @@ public final class Form {
     private final List<Field> fields = new ArrayList<Field>();
     private int row;
 
+    {
+        // a filler far below the last row soaks up spare height: the rows stay at the top of the
+        // scroll pane instead of floating in its middle
+        GridBagConstraints c = new GridBagConstraints();
+        c.gridx = 0;
+        c.gridy = 100000;
+        c.gridwidth = 2;
+        c.weightx = 1;
+        c.weighty = 1;
+        c.fill = GridBagConstraints.BOTH;
+        panel.add(new JPanel(), c);
+    }
+    /** Rows added while this is set belong to the advanced set, hidden until asked for. */
+    private boolean advanced;
+    private final List<JComponent> advancedComps = new ArrayList<JComponent>();
+    private JCheckBox toggle;
+    private boolean toggleApplied;
+
     public JPanel panel() {
         return panel;
     }
 
     public void section(String title) {
-        JLabel l = new JLabel(title);
-        l.setFont(l.getFont().deriveFont(java.awt.Font.BOLD));
+        JLabel l = Ui.sectionHeader(title);
         GridBagConstraints c = gbc(0, row++, 2);
-        c.insets = new Insets(10, 4, 2, 4);
+        c.insets = new Insets(4, 4, 2, 4);
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1;
         panel.add(l, c);
+        if (advanced) {
+            advancedComps.add(l);
+        }
+    }
+
+    /** Rows added from here on are advanced settings (hidden behind the toggle). */
+    public void beginAdvanced() {
+        advanced = true;
+    }
+
+    public void endAdvanced() {
+        advanced = false;
+    }
+
+    public boolean hasAdvanced() {
+        return !advancedComps.isEmpty();
+    }
+
+    public void setAdvancedVisible(boolean v) {
+        for (JComponent c : advancedComps) {
+            c.setVisible(v);
+        }
+        if (toggle != null && toggle.isSelected() != v) {
+            toggle.setSelected(v);
+        }
+        panel.revalidate();
+        panel.repaint();
+    }
+
+    public boolean advancedVisible() {
+        return toggle == null || toggle.isSelected();
+    }
+
+    /**
+     * Adds the "Advanced settings" switch as the first row: everything marked advanced stays
+     * hidden until it is ticked. The hiding is applied on the first {@link #refresh()}.
+     */
+    public JCheckBox addAdvancedToggle() {
+        toggle = new JCheckBox("Advanced settings", false);
+        toggle.setToolTipText("Show every setting; the defaults are fine to start with");
+        GridBagConstraints c = gbc(0, row++, 2);
+        c.insets = new Insets(2, 0, 2, 4);
+        c.anchor = GridBagConstraints.WEST;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1;
+        panel.add(toggle, c);
+        toggle.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                setAdvancedVisible(toggle.isSelected());
+            }
+        });
+        return toggle;
     }
 
     public JTextField addDouble(final String label, String tooltip, final DoubleGet get, final DoubleSet set) {
@@ -143,6 +214,10 @@ public final class Form {
         c.weightx = 1;
         panel.add(comp, c);
         row++;
+        if (advanced) {
+            advancedComps.add(l);
+            advancedComps.add(comp);
+        }
     }
 
     private static String escape(String s) {
@@ -161,6 +236,10 @@ public final class Form {
     public void refresh() {
         for (Field f : fields) {
             f.refresh();
+        }
+        if (toggle != null && !toggleApplied) {
+            toggleApplied = true;
+            setAdvancedVisible(toggle.isSelected());
         }
     }
 

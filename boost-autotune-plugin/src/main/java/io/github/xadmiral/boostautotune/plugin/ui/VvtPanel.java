@@ -43,6 +43,7 @@ public final class VvtPanel extends JPanel {
         intro.setBackground(getBackground());
         add(intro, BorderLayout.NORTH);
 
+        form.addAdvancedToggle();
         form.section("VVT target sweep (pulls)");
         form.addText("Candidate offsets, deg (must include 0)", "Added to the current WOT-row values, one candidate per run",
                 new Form.TextGet() { public String get() { return SettingsStore.joinDoubles(sweep.candidateOffsets); } },
@@ -60,6 +61,7 @@ public final class VvtPanel extends JPanel {
         form.addDouble("Gear (0 = any)", "Pulls in another gear are ignored when a gear channel is bound",
                 new Form.DoubleGet() { public double get() { return sweep.gear; } },
                 new Form.DoubleSet() { public void set(double v) { sweep.gear = (int) v; } });
+        form.beginAdvanced();
         form.addDouble("Min torque gain to change a cell, %", "",
                 new Form.DoubleGet() { public double get() { return sweep.minGainPct; } },
                 new Form.DoubleSet() { public void set(double v) { sweep.minGainPct = v; } });
@@ -82,12 +84,14 @@ public final class VvtPanel extends JPanel {
         form.addDouble("Auto end run after idle, s", "0 = manual", new Form.DoubleGet() { public double get() { return sweep.autoEndRunIdleSec; } },
                 new Form.DoubleSet() { public void set(double v) { sweep.autoEndRunIdleSec = v; } });
 
+        form.endAdvanced();
         form.section("VVT closed-loop PID (normal driving)");
         form.addDouble("Cam commanded at least, deg", "Samples with a smaller target are ignored (cam at rest)",
                 new Form.DoubleGet() { public double get() { return pid.activeMinTargetDeg; } },
                 new Form.DoubleSet() { public void set(double v) { pid.activeMinTargetDeg = v; } });
         form.addDouble("Minimum RPM", "", new Form.DoubleGet() { public double get() { return pid.minRpm; } },
                 new Form.DoubleSet() { public void set(double v) { pid.minRpm = v; } });
+        form.beginAdvanced();
         form.addDouble("Minimum coolant, °C", "", new Form.DoubleGet() { public double get() { return pid.minCltC; } },
                 new Form.DoubleSet() { public void set(double v) { pid.minCltC = v; } });
         form.addDouble("Ringing amplitude limit, deg", "", new Form.DoubleGet() { public double get() { return pid.oscillationDeg; } },
