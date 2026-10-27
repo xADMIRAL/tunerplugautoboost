@@ -28,6 +28,21 @@ class SampleClassifierTest {
     }
 
     @Test
+    void theTuningGearFiltersWotSamplesWhenTheEcuReportsAGear() {
+        AutotuneConfig cfg = cfg();
+        cfg.gear = 4;
+        SampleClassifier c = new SampleClassifier(cfg);
+        assertEquals(SampleState.WRONG_GEAR, c.classify(Sample.builder().time(0).tps(100).rpm(3000).map(100).clt(90).gear(3).build()));
+        assertEquals(SampleState.NOT_WOT, c.classify(Sample.builder().time(0.1).tps(20).rpm(3000).map(100).clt(90).gear(3).build()));
+        assertNotEquals(SampleState.WRONG_GEAR, c.classify(Sample.builder().time(0.2).tps(100).rpm(3000).map(100).clt(90).gear(4).build()));
+        assertNotEquals(SampleState.WRONG_GEAR, c.classify(Sample.builder().time(0.3).tps(100).rpm(3000).map(100).clt(90).gear(0).build()), "no gear channel: no filter");
+        assertFalse(SampleState.WRONG_GEAR.isPullSample());
+        cfg.gear = 0;
+        SampleClassifier any = new SampleClassifier(cfg);
+        assertNotEquals(SampleState.WRONG_GEAR, any.classify(Sample.builder().time(0).tps(100).rpm(3000).map(100).clt(90).gear(2).build()));
+    }
+
+    @Test
     void filtersInPriorityOrder() {
         SampleClassifier c = new SampleClassifier(cfg());
         assertEquals(SampleState.NOT_WOT, c.classify(s(0, 20, 3000, 100, 90, false)));

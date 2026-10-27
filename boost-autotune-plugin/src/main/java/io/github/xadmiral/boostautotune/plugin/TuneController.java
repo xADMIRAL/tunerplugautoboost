@@ -425,6 +425,7 @@ public final class TuneController {
             case COLD: return "coolant too cold, samples ignored";
             case RPM_OUT_OF_RANGE: return "RPM outside the window";
             case BOOST_CUT: return "BOOST CUT active";
+            case WRONG_GEAR: return "full throttle, but not in the tuning gear";
             case OVERBOOST: return "OVERBOOST";
             default: return st.label();
         }
@@ -715,7 +716,9 @@ public final class TuneController {
                 liveClassifier = new SampleClassifier(bs.config());
             }
         } else if (liveClassifier == null) {
-            liveClassifier = new SampleClassifier(new AutotuneConfig());
+            AutotuneConfig generic = new AutotuneConfig();
+            generic.gear = 0; // the other modes have their own gear rules
+            liveClassifier = new SampleClassifier(generic);
         }
         return liveClassifier.classify(s);
     }

@@ -6,6 +6,7 @@ import io.github.xadmiral.boostautotune.core.model.Axis;
 import io.github.xadmiral.boostautotune.core.model.Grid;
 import io.github.xadmiral.boostautotune.core.model.LoadSource;
 import io.github.xadmiral.boostautotune.core.model.PidGains;
+import io.github.xadmiral.boostautotune.core.learn.SampleState;
 import io.github.xadmiral.boostautotune.core.model.Sample;
 import io.github.xadmiral.boostautotune.core.sim.BoostPlant;
 import io.github.xadmiral.boostautotune.core.sim.PullSimulator;
@@ -47,6 +48,8 @@ class AutotuneEndToEndTest {
         AutotuneConfig c = new AutotuneConfig();
         c.targetStagesKpa = new ArrayList<Double>(Arrays.asList(150.0, 170.0));
         c.wastegateKpa = 130;
+        c.autoWastegate = false; // the legacy flow: the spring pressure comes from the settings
+        c.gear = 0;              // these tests pull in 3rd and 4th
         c.spoolStartRpm = 2300;
         c.fullTargetRpm = 3300;
         c.wotLoadThreshold = 80;
@@ -136,6 +139,55 @@ class AutotuneEndToEndTest {
         double bestReach = Double.NaN;
         int pushes;
         final List<String> log = new ArrayList<String>();
+    }
+
+    @Test
+    void measuresTheSpringPressureFirstAndIgnoresPullsInTheWrongGear() {
+        AutotuneConfig cfg = config();
+        cfg.autoWastegate = true;
+        cfg.wastegateKpa = 110; // wrong on purpose: the plant's spring holds 132
+        cfg.gear = 4;
+        AutotuneSession session = new AutotuneSession(cfg);
+        BoostPlant plant = new BoostPlant(42);
+        SimEcu ecu = new SimEcu(untouchedMs3Tune());
+        PullSimulator sim = new PullSimulator(plant, ecu);
+        RunPlan plan = session.initialize(untouchedMs3Tune());
+        assertTrue(plan.springRun);
+        assertEquals(0, plan.openLoopDuty, 1e-9);
+        assertTrue(plan.title().contains("spring pressure"), plan.title());
+        assertTrue(plan.driverInstructions().contains("4th gear"), plan.driverInstructions());
+        int runs = 0;
+        RunReport first = null;
+        while (session.state() != SessionState.DONE && runs < 18) {
+            ecu.apply(plan.ecu);
+            session.startRun();
+            for (int gear : new int[]{3, 4}) {
+                for (Sample s : sim.pull(gear)) {
+                    session.onSample(s);
+                }
+                sim.setTime(sim.time() + 3);
+            }
+            assertNotEquals(SessionState.ABORTED, session.state(), "aborted: " + session.abortReason());
+            RunReport r = session.endRun();
+            if (first == null) {
+                first = r;
+            }
+            // the 3rd-gear pull is ignored: one pull per run, its samples counted as wrong gear
+            assertEquals(1, r.pulls.size(), r.summary());
+            assertTrue(r.sampleCounts.get(SampleState.WRONG_GEAR) > 20, r.summary());
+            plan = session.commit(r);
+            runs++;
+        }
+        assertEquals(SessionState.DONE, session.state(), "did not converge in " + runs + " runs");
+        assertTrue(runs <= 14, "runs " + runs);
+        assertEquals(132, first.springKpa, 4, "spring read off the open-valve pull");
+        assertEquals(first.springKpa, session.measuredSpringKpa(), 1e-9);
+        assertEquals(first.springKpa, session.config().wastegateKpa, 1e-9, "the measured value replaces the setting");
+        assertTrue(first.summary().contains("spring pressure measured"), first.summary());
+        assertFalse(first.nextPlan.springRun);
+        assertEquals(20, first.nextPlan.openLoopDuty, 1e-9, "the ladder starts at its first step after the spring run");
+        // the final target table ramps from the measured spring, not from the wrong setting
+        assertEquals(first.springKpa, plan.ecu.targetTable.get(0, 7), 1.5);
     }
 
     /** Drives a whole session (3rd + 4th gear pull per run) and returns what it ended with. */

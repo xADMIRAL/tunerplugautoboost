@@ -50,9 +50,15 @@ public final class TargetsPanel extends JPanel {
                 "Each stage is tuned to convergence before the next one starts, e.g. 150, 170",
                 new Form.TextGet() { public String get() { return stagesText(); } },
                 new Form.TextSet() { public void set(String v) { setStages(v); } });
-        form.addDouble("Wastegate spring pressure, kPa", "Boost with the valve fully open; targets below spool RPM",
+        form.addBool("Measure the spring pressure with the first run", "The first pull is done with the wastegate valve fully open: its boost is the spring pressure, read off the pull and used from then on",
+                new Form.BoolGet() { public boolean get() { return cfg.autoWastegate; } },
+                new Form.BoolSet() { public void set(boolean v) { cfg.autoWastegate = v; } });
+        form.addDouble("Wastegate spring pressure, kPa (until measured)", "Boost with the valve fully open; targets below spool RPM. Replaced by the measured value when the box above is ticked",
                 new Form.DoubleGet() { public double get() { return cfg.wastegateKpa; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.wastegateKpa = v; } });
+        form.addDouble("Gear for the pulls (0 = any)", "Samples in another gear are ignored when the ECU reports the gear; 4th on a JZX110 gives a long, repeatable pull",
+                new Form.DoubleGet() { public double get() { return cfg.gear; } },
+                new Form.DoubleSet() { public void set(double v) { cfg.gear = (int) Math.max(0, v); } });
         form.addDouble("Spool start RPM", "Ramp mode: target ramps up from wastegate pressure here. Fast spool: wastegate pressure up to here, the stage target right above (0 = flat)",
                 new Form.DoubleGet() { public double get() { return cfg.spoolStartRpm; } },
                 new Form.DoubleSet() { public void set(double v) { cfg.spoolStartRpm = v; } });

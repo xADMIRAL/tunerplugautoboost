@@ -57,6 +57,7 @@ public final class SweepSession {
         filters.minPullDurationSec = cfg.minPullDurationSec;
         filters.settleDelaySec = 0.3;
         filters.autoEndRunIdleSec = cfg.autoEndRunIdleSec;
+        filters.gear = 0; // the sweep checks the gear per pull (TorqueProxy), not per sample
         this.classifier = new SampleClassifier(filters);
         this.segmenter = new PullSegmenter(filters, classifier);
     }

@@ -36,6 +36,8 @@ public final class RunReport {
     public double spoolOpenLoopSec = Double.NaN;
     /** Spool push applied for the next run (trim / P / window), or null. */
     public String spoolPush;
+    /** Wastegate spring pressure read off a spring run, kPa; NaN otherwise. */
+    public double springKpa = Double.NaN;
     public RunPlan nextPlan;
 
     RunReport(RunPlan plan) {
@@ -56,6 +58,9 @@ public final class RunReport {
         sb.append(String.format(Locale.US, "Samples: %d, pulls: %d, steady: %d, peak %.1f kPa\n",
                 totalSamples(), pulls.size(), sampleCounts.containsKey(SampleState.STEADY) ? sampleCounts.get(SampleState.STEADY) : 0,
                 observedPeakKpa));
+        if (!Double.isNaN(springKpa)) {
+            sb.append(String.format(Locale.US, "  Wastegate spring pressure measured: %.0f kPa\n", springKpa));
+        }
         for (ResponseMetrics m : metrics) {
             sb.append("  pull: ").append(m.summary()).append('\n');
         }

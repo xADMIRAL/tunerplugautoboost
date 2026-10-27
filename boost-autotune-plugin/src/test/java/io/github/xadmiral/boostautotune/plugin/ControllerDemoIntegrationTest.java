@@ -49,6 +49,8 @@ class ControllerDemoIntegrationTest {
         AutotuneConfig cfg = new AutotuneConfig();
         cfg.targetStagesKpa = new ArrayList<Double>(Arrays.asList(150.0, 170.0));
         cfg.wastegateKpa = 130;
+        cfg.autoWastegate = false;
+        cfg.gear = 0; // this test pulls in 3rd and 4th
         cfg.spoolStartRpm = 2300;
         cfg.fullTargetRpm = 3300;
         cfg.maxBoostKpa = 200;
@@ -134,6 +136,7 @@ class ControllerDemoIntegrationTest {
         // a session on top of the running feed records pulls and logs them
         AutotuneConfig cfg = new AutotuneConfig();
         cfg.autoEndRunIdleSec = 0;
+        cfg.gear = 3;
         ctl.startSession(cfg, binding);
         ctl.writePlanToEcu();
         ctl.startRun();
@@ -163,6 +166,8 @@ class ControllerDemoIntegrationTest {
         cfg.maxBoostKpa = 160;
         cfg.characterizeStartDuty = 90; // way too much duty for the first pull
         cfg.characterizeMaxDuty = 95;
+        cfg.autoWastegate = false;
+        cfg.gear = 3;
         cfg.autoEndRunIdleSec = 0;
         EcuBinding binding = EcuPresets.create(EcuPresets.STEALTH_PCM);
         binding.timeChannel = "seconds";

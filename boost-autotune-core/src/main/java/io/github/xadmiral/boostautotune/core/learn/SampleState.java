@@ -8,7 +8,8 @@ public enum SampleState {
     COLD("coolant below minimum"),
     RPM_OUT_OF_RANGE("RPM out of range"),
     BOOST_CUT("boost cut active"),
-    OVERBOOST("above hard limit");
+    OVERBOOST("above hard limit"),
+    WRONG_GEAR("not in the tuning gear");
 
     private final String label;
 

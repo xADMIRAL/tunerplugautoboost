@@ -59,6 +59,9 @@ public final class SampleClassifier {
         if (Double.isNaN(wotOnsetTime)) {
             wotOnsetTime = s.timeSec;
         }
+        if (cfg.gear > 0 && s.gear > 0 && s.gear != cfg.gear) {
+            return SampleState.WRONG_GEAR;
+        }
         if (s.boostCut) {
             return SampleState.BOOST_CUT;
         }

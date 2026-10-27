@@ -65,6 +65,9 @@ public final class AutotuneSession {
     private RunPlan plan;
     private RunReport lastReport;
     private double runPeak = Double.NaN;
+    /** Spring pressure read off the first run (NaN until measured). */
+    private double measuredSpringKpa = Double.NaN;
+    private boolean springRunDone;
     private final int[] counts = new int[SampleState.values().length];
     private String abortReason;
     private final List<String> log = new ArrayList<String>();
@@ -127,6 +130,11 @@ public final class AutotuneSession {
         return segmenter.pullCount() + (segmenter.pullInProgress() ? 1 : 0);
     }
 
+    /** The wastegate spring pressure measured by the spring run, or NaN when none was done yet. */
+    public double measuredSpringKpa() {
+        return measuredSpringKpa;
+    }
+
     public double idleSeconds() {
         return segmenter.idleSeconds();
     }
@@ -171,11 +179,19 @@ public final class AutotuneSession {
         floorByStage.clear();
         resetSpoolPush();
         abortReason = null;
+        measuredSpringKpa = Double.NaN;
+        springRunDone = false;
         log.clear();
         boolean canCharacterize = cfg.characterizeFirst && current.hasOpenLoopTable() && current.hasBiasTable();
         phase = canCharacterize ? SessionPhase.CHARACTERIZE : SessionPhase.CLOSED_LOOP;
         if (!canCharacterize && cfg.characterizeFirst) {
             note("Open-loop characterization skipped: the ECU binding has no open-loop duty table or no bias table");
+        }
+        if (cfg.autoWastegate && !canCharacterize) {
+            note(String.format(Locale.US, "Spring pressure cannot be measured without an open-loop duty table: using %.0f kPa from the settings", cfg.wastegateKpa));
+        }
+        if (cfg.gear > 0) {
+            note("Pulls in gear " + cfg.gear + " only (samples in another gear are ignored when the ECU reports the gear)");
         }
         if (cfg.fastSpool) {
             note("Fast spool: valve held shut where the target is out of reach, flat WOT target above the spool-start RPM, "
@@ -300,7 +316,57 @@ public final class AutotuneSession {
 
     // ------------------------------------------------------------------------------------------
 
+    /** Reads the spring pressure off a pull with the valve fully open: the median MAP of the plateau. */
+    private void analyseSpringRun(RunReport report) {
+        double from = Math.max(cfg.fullTargetRpm, Math.max(cfg.spoolStartRpm, cfg.minRpm));
+        List<Double> plateau = new ArrayList<Double>();
+        List<Double> all = new ArrayList<Double>();
+        for (Pull p : report.pulls) {
+            for (Sample s : p.samples()) {
+                if (!Stats.finite(s.map) || s.tps < cfg.wotLoadThreshold) {
+                    continue;
+                }
+                all.add(s.map);
+                if (s.rpm >= from) {
+                    plateau.add(s.map);
+                }
+            }
+        }
+        List<Double> use = plateau.size() >= cfg.minSamplesPerCell ? plateau : all;
+        if (use.isEmpty()) {
+            report.messages.add("No full-throttle samples with the valve open: repeat the spring pressure run");
+            report.nextPlan = repeatPlan();
+            return;
+        }
+        double spring = Stats.round(Stats.median(use), 0);
+        measuredSpringKpa = spring;
+        springRunDone = true;
+        report.springKpa = spring;
+        double minTarget = cfg.targetStagesKpa.get(0);
+        for (double t : cfg.targetStagesKpa) {
+            minTarget = Math.min(minTarget, t);
+        }
+        double used = spring;
+        if (spring >= minTarget - 5) {
+            used = minTarget - 5;
+            report.messages.add(String.format(Locale.US,
+                    "The spring alone holds %.0f kPa, which is at or above the lowest stage target %.0f kPa: the targets cannot go below the spring, "
+                            + "raise them or fit a softer spring. %.0f kPa is used for the ramp", spring, minTarget, used));
+        }
+        report.messages.add(String.format(Locale.US, "Wastegate spring pressure measured: %.0f kPa (median of %d samples%s); was %.0f kPa in the settings",
+                spring, use.size(), use == plateau ? String.format(Locale.US, " above %.0f rpm", from) : "", cfg.wastegateKpa));
+        cfg.wastegateKpa = used;
+        int added = addObservations(report.pulls, 1.0, false, 1.0);
+        report.messages.add(String.format(Locale.US, "%d steady samples added to the plant model at %.0f%% duty (valve open)", added, plan.openLoopDuty));
+        report.plantGainKpaPerPct = model.gainKpaPerPct();
+        report.nextPlan = planCharacterize();
+    }
+
     private void analyseCharacterize(RunReport report) {
+        if (plan.springRun) {
+            analyseSpringRun(report);
+            return;
+        }
         double duty = plan.openLoopDuty;
         int added = addObservations(report.pulls, 1.0, false, 1.0);
         report.messages.add(String.format(Locale.US, "%d steady samples added to the plant model at %.0f%% duty", added, duty));
@@ -325,6 +391,7 @@ public final class AutotuneSession {
             next.closedLoop = false;
             RunPlan np = new RunPlan(runNumber + 1, SessionPhase.CHARACTERIZE, stageIndex, cfg.targetStagesKpa.get(0),
                     step.duty, next);
+            np.gear = cfg.gear;
             np.notes.add(step.reason);
             report.nextPlan = np;
             return;
@@ -716,12 +783,25 @@ public final class AutotuneSession {
     }
 
     private RunPlan planCharacterize() {
+        if (cfg.autoWastegate && !springRunDone && ladderDuties.isEmpty()) {
+            // the valve fully open: the boost of this pull is the spring pressure
+            EcuState next = current.copy();
+            next.openLoopTable = TargetTableBuilder.buildOpenLoopDuty(current.openLoopTable, current.minDuty, cfg,
+                    current.minDuty, current.maxDuty);
+            next.closedLoop = false;
+            RunPlan p = new RunPlan(runNumber + 1, SessionPhase.CHARACTERIZE, 0, cfg.targetStagesKpa.get(0), current.minDuty, next);
+            p.springRun = true;
+            p.gear = cfg.gear;
+            p.notes.add("Measures the wastegate spring pressure: the open-loop ladder starts after it");
+            return p;
+        }
         DutyLadder.Step step = DutyLadder.next(model, cfg, current.minDuty, current.maxDuty, ladderDuties, Double.NaN);
         EcuState next = current.copy();
         next.openLoopTable = TargetTableBuilder.buildOpenLoopDuty(current.openLoopTable, step.duty, cfg,
                 current.minDuty, current.maxDuty);
         next.closedLoop = false;
         RunPlan p = new RunPlan(runNumber + 1, SessionPhase.CHARACTERIZE, 0, cfg.targetStagesKpa.get(0), step.duty, next);
+        p.gear = cfg.gear;
         p.notes.add(step.reason);
         return p;
     }
@@ -737,6 +817,7 @@ public final class AutotuneSession {
             }
         }
         RunPlan p = new RunPlan(runNumber + 1, SessionPhase.CLOSED_LOOP, stageIndex, target, Double.NaN, next);
+        p.gear = cfg.gear;
         if (stageStart) {
             p.notes.add(String.format(Locale.US, "Target table rebuilt for %.0f kPa", target));
             if (cfg.fastSpool) {
@@ -756,6 +837,8 @@ public final class AutotuneSession {
 
     private RunPlan repeatPlan() {
         RunPlan p = new RunPlan(runNumber + 1, plan.phase, plan.stageIndex, plan.stageTarget, plan.openLoopDuty, plan.ecu.copy());
+        p.springRun = plan.springRun;
+        p.gear = cfg.gear;
         p.notes.add("Repeat of the previous run");
         return p;
     }

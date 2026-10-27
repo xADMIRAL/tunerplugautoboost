@@ -161,6 +161,8 @@ public final class SettingsStore {
         }
         p.setProperty(pre + "targetStagesKpa", stages.toString());
         p.setProperty(pre + "wastegateKpa", fmt(c.wastegateKpa));
+        p.setProperty(pre + "autoWastegate", Boolean.toString(c.autoWastegate));
+        p.setProperty(pre + "gear", Integer.toString(c.gear));
         p.setProperty(pre + "spoolStartRpm", fmt(c.spoolStartRpm));
         p.setProperty(pre + "fullTargetRpm", fmt(c.fullTargetRpm));
         p.setProperty(pre + "highRpmTaperKpa", fmt(c.highRpmTaperKpa));
@@ -227,6 +229,8 @@ public final class SettingsStore {
             }
         }
         c.wastegateKpa = d(p, pre + "wastegateKpa", c.wastegateKpa);
+        c.autoWastegate = bool(p, pre + "autoWastegate", c.autoWastegate);
+        c.gear = (int) d(p, pre + "gear", c.gear);
         c.spoolStartRpm = d(p, pre + "spoolStartRpm", c.spoolStartRpm);
         c.fullTargetRpm = d(p, pre + "fullTargetRpm", c.fullTargetRpm);
         c.highRpmTaperKpa = d(p, pre + "highRpmTaperKpa", c.highRpmTaperKpa);

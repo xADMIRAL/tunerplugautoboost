@@ -15,6 +15,10 @@ public final class AutotuneConfig {
     public List<Double> targetStagesKpa = new ArrayList<Double>();
     /** Boost when the wastegate is fully open (spring pressure). Used below the spool RPM. */
     public double wastegateKpa = 130;
+    /** Measure the spring pressure with a first pull at minimum duty (valve fully open) instead of trusting the number above. */
+    public boolean autoWastegate = true;
+    /** Gear the pulls are done in (0 = any); samples in another gear are ignored when the ECU reports the gear. */
+    public int gear = 4;
     /** Target ramps from wastegate pressure at this RPM ... */
     public double spoolStartRpm = 2200;
     /** ... up to the stage target at this RPM. Set both to 0 for a flat target. */
@@ -156,6 +160,8 @@ public final class AutotuneConfig {
         AutotuneConfig c = new AutotuneConfig();
         c.targetStagesKpa = new ArrayList<Double>(targetStagesKpa);
         c.wastegateKpa = wastegateKpa;
+        c.autoWastegate = autoWastegate;
+        c.gear = gear;
         c.spoolStartRpm = spoolStartRpm;
         c.fullTargetRpm = fullTargetRpm;
         c.highRpmTaperKpa = highRpmTaperKpa;

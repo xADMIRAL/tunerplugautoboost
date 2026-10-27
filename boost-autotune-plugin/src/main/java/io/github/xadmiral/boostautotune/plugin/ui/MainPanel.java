@@ -373,9 +373,18 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
     }
 
     @Override
-    public void reportReady(Object report) {
+    public void reportReady(final Object report) {
         onEdt(new Runnable() {
             public void run() {
+                // a measured spring pressure becomes the setting, so the next session starts from it
+                if (report instanceof io.github.xadmiral.boostautotune.core.session.RunReport) {
+                    double spring = ((io.github.xadmiral.boostautotune.core.session.RunReport) report).springKpa;
+                    if (!Double.isNaN(spring)) {
+                        cfg.wastegateKpa = spring;
+                        targets.refresh();
+                        saveSettings();
+                    }
+                }
                 autotune.showReport();
                 analysis.refresh();
                 autotune.updateState();
