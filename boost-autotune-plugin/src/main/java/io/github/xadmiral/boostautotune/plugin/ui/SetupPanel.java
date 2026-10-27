@@ -22,6 +22,7 @@ import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableCellEditor;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -199,6 +200,7 @@ public final class SetupPanel extends JPanel {
         });
 
         table.setRowHeight(22);
+        table.setPreferredScrollableViewportSize(new Dimension(740, 22 * 9));
         table.getColumnModel().getColumn(0).setPreferredWidth(260);
         table.getColumnModel().getColumn(1).setPreferredWidth(260);
         table.getColumnModel().getColumn(2).setPreferredWidth(220);

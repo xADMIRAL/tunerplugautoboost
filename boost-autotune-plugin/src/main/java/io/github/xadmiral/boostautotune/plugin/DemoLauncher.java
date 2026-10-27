@@ -30,7 +30,7 @@ public final class DemoLauncher {
                 JFrame frame = new JFrame("Boost Autotune - demo (simulated MS3)");
                 frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
                 frame.setContentPane(panel);
-                frame.setSize(1150, 760);
+                frame.pack(); // the panel asks for half the screen, like the TunerStudio dialog
                 frame.setLocationRelativeTo(null);
                 frame.setVisible(true);
             }

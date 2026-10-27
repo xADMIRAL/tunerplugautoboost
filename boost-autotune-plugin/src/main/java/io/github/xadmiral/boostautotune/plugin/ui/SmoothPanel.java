@@ -20,6 +20,7 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.table.DefaultTableCellRenderer;
+import java.awt.Dimension;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -215,6 +216,7 @@ public final class SmoothPanel extends JPanel {
         p.add(l, BorderLayout.NORTH);
         // fixed column widths and a horizontal scrollbar: 16 columns must stay readable
         t.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        t.setPreferredScrollableViewportSize(new Dimension(620, 8 * 20));
         p.add(new JScrollPane(t, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED), BorderLayout.CENTER);
         return p;
     }

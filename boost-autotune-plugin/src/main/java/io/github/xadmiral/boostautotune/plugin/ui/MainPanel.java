@@ -20,6 +20,9 @@ import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
+import java.awt.Rectangle;
 import java.io.IOException;
 import java.util.List;
 import java.util.Properties;
@@ -46,6 +49,11 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
     private final AnalysisPanel analysis;
     private final LogPanel logPanel = new LogPanel();
     private final JTabbedPane tabs = new JTabbedPane();
+    /** Share of the usable screen the plugin window asks for: TunerStudio packs its dialog to this. */
+    public static final double WINDOW_HEIGHT_FRACTION = 0.5;
+    public static final double WINDOW_WIDTH_FRACTION = 0.7;
+    private static final int MIN_WINDOW_WIDTH = 960;
+    private static final int MIN_WINDOW_HEIGHT = 420;
     private final Properties uiPrefs = new Properties();
     private double fontScale = Fonts.DEFAULT_SCALE;
     private final javax.swing.JComboBox<String> textSize = new javax.swing.JComboBox<String>(Fonts.CHOICES);
@@ -99,7 +107,7 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
             }
         });
         analysis = new AnalysisPanel(ctl);
-        tabs.addTab("Autotune", autotune);
+        tabs.addTab("Autotune", Ui.verticalScroller(autotune));
         tabs.addTab("Boost", targets);
         tabs.addTab("VVT", vvtPanel);
         tabs.addTab("Ignition", ignitionPanel);
@@ -193,6 +201,34 @@ public final class MainPanel extends JPanel implements TuneController.Listener {
 
     public double fontScale() {
         return fontScale;
+    }
+
+    /**
+     * Half the screen high, not the full screen: the host sizes its dialog from this, and the tabs
+     * scroll inside when their content is taller (the Autotune tab) or shrink their tables.
+     */
+    @Override
+    public Dimension getPreferredSize() {
+        Dimension natural = super.getPreferredSize();
+        if (isPreferredSizeSet()) {
+            return natural;
+        }
+        Rectangle screen = usableScreen();
+        int w = Math.min(natural.width, Math.max(MIN_WINDOW_WIDTH, (int) Math.round(screen.width * WINDOW_WIDTH_FRACTION)));
+        int h = Math.min(natural.height, Math.max(MIN_WINDOW_HEIGHT, (int) Math.round(screen.height * WINDOW_HEIGHT_FRACTION)));
+        return new Dimension(w, h);
+    }
+
+    /** The screen area a window can use (taskbar excluded); a full HD screen is assumed headless. */
+    static Rectangle usableScreen() {
+        if (!GraphicsEnvironment.isHeadless()) {
+            try {
+                return GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+            } catch (RuntimeException e) {
+                // fall through to the default
+            }
+        }
+        return new Rectangle(0, 0, 1920, 1080);
     }
 
     /** Changes the text size of the whole plugin and remembers it. */

@@ -21,8 +21,6 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -41,15 +39,15 @@ public final class AutotunePanel extends JPanel {
     private final Ui.Steps steps = new Ui.Steps("Start session", "Write plan", "Start run", "End run", "Apply & next");
     private final JLabel planLabel = new JLabel(" ");
     private final JTextArea progressLabel = new JTextArea(" ");
-    private final JTextArea instructions = new JTextArea(2, 60);
+    private final JTextArea instructions = new JTextArea(1, 60); // grows with the text
     private static final String[] LIVE_NAMES = {"RPM", "TPS %", "MAP kPa", "Boost tgt", "Boost duty", "CLT °C", "Gear",
             "VVT angle", "VVT target", "Advance", "Knock rtd", "AFR", "Sample", "Pulls / peak", "MAT °C", "Anti-lag", "Knock %"};
     private final JLabel[] live = new JLabel[LIVE_NAMES.length];
     private final JPanel[] liveCells = new JPanel[LIVE_NAMES.length];
     private Color cardBg;
-    private final JTextArea report = new JTextArea(7, 80);
+    private final JTextArea report = new JTextArea(REPORT_ROWS_SMALL, 80);
     private final JButton reportSize = new JButton("Expand");
-    private static final int REPORT_ROWS_SMALL = 7;
+    private static final int REPORT_ROWS_SMALL = 5;
     private static final int REPORT_ROWS_LARGE = 22;
     private final JButton startSession = new JButton("Start session");
     private final JButton writePlan = new JButton("Write plan to ECU");
@@ -80,42 +78,36 @@ public final class AutotunePanel extends JPanel {
         primaries = new JButton[]{startSession, writePlan, startRun, endRun, applyNext, burn, restore};
 
         // a vertical stack that gives every row its preferred height: nothing gets squeezed when the
-        // text is large or the window narrow
-        JPanel top = new JPanel(new GridBagLayout());
-        GridBagConstraints gc = new GridBagConstraints();
-        gc.gridx = 0;
-        gc.weightx = 1;
-        gc.fill = GridBagConstraints.HORIZONTAL;
-        gc.anchor = GridBagConstraints.WEST;
-        gc.insets = new Insets(0, 0, 3, 0);
+        // text is large or the window narrow or short
+        JPanel top = new JPanel(new Ui.VStack(3));
         JPanel modeRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 2));
         JLabel modeCaption = new JLabel("Mode");
         modeCaption.setFont(modeCaption.getFont().deriveFont(Font.BOLD));
         modeRow.add(modeCaption);
         modeRow.add(modeCombo);
         modeRow.add(startSession);
-        top.add(modeRow, gc);
+        top.add(modeRow);
         JPanel stateRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 2));
         stateLabel.setFont(stateLabel.getFont().deriveFont(Font.BOLD, 14f));
         stateRow.add(stateLabel);
         phaseLabel.setForeground(Palette.dimTextOn(Palette.panel()));
         stateRow.add(phaseLabel);
-        top.add(stateRow, gc);
-        top.add(steps, gc);
-        top.add(planLabel, gc);
+        top.add(stateRow);
+        top.add(steps);
+        top.add(planLabel);
         // a wrapping line: the waiting / silent-channel hints are long and must stay readable
         progressLabel.setEditable(false);
         progressLabel.setLineWrap(true);
         progressLabel.setWrapStyleWord(true);
         progressLabel.setOpaque(false);
         progressLabel.setFont(new JLabel().getFont().deriveFont(Font.BOLD));
-        top.add(progressLabel, gc);
+        top.add(progressLabel);
         instructions.setEditable(false);
         instructions.setLineWrap(true);
         instructions.setWrapStyleWord(true);
         instructions.setOpaque(false);
         instructions.setForeground(Palette.text());
-        top.add(instructions, gc);
+        top.add(instructions);
 
         // the live cells paint their own background and text colours: the host's theme (TunerStudio is
         // dark) must not be able to hide them
@@ -143,7 +135,7 @@ public final class AutotunePanel extends JPanel {
         JPanel liveBox = new JPanel(new BorderLayout());
         liveBox.add(Ui.sectionHeader("Live"), BorderLayout.NORTH);
         liveBox.add(liveRow, BorderLayout.CENTER);
-        top.add(liveBox, gc);
+        top.add(liveBox);
         add(top, BorderLayout.NORTH);
 
         buttonRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 4));
@@ -166,25 +158,19 @@ public final class AutotunePanel extends JPanel {
         report.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         // the report is a compact box under the buttons (a few rows, Expand for more), not a white
         // field that swallows the rest of the window
-        JPanel rows = new JPanel(new GridBagLayout());
-        GridBagConstraints rc = new GridBagConstraints();
-        rc.gridx = 0;
-        rc.weightx = 1;
-        rc.fill = GridBagConstraints.HORIZONTAL;
-        rc.anchor = GridBagConstraints.NORTHWEST;
-        rows.add(buttonRow, rc);
-        rows.add(secondaryRow, rc);
+        JPanel rows = new JPanel(new Ui.VStack(3));
+        rows.add(buttonRow);
+        rows.add(secondaryRow);
         JPanel reportHeader = new JPanel(new BorderLayout(6, 0));
         reportHeader.add(Ui.sectionHeader("Last run report"), BorderLayout.CENTER);
         reportSize.setMargin(new Insets(1, 8, 1, 8));
         reportHeader.add(reportSize, BorderLayout.EAST);
-        rc.insets = new Insets(4, 0, 0, 0);
-        rows.add(reportHeader, rc);
+        rows.add(reportHeader);
         final JScrollPane reportScroll = new JScrollPane(report);
-        rc.insets = new Insets(2, 0, 0, 0);
-        rows.add(reportScroll, rc);
-        // NORTH of a BorderLayout: the stack keeps its preferred height whatever the window size,
-        // so a short window never squeezes the wrapped button rows
+        rows.add(reportScroll);
+        // NORTH of a BorderLayout: the stack keeps its preferred height whatever the window size.
+        // A tall window leaves room below (the report stays a compact box, Expand gives more rows);
+        // a short one scrolls the whole tab (MainPanel wraps it in a vertical scroller).
         JPanel center = new JPanel(new BorderLayout());
         center.add(rows, BorderLayout.NORTH);
         add(center, BorderLayout.CENTER);
@@ -194,8 +180,8 @@ public final class AutotunePanel extends JPanel {
                 report.setRows(small ? REPORT_ROWS_LARGE : REPORT_ROWS_SMALL);
                 reportSize.setText(small ? "Shrink" : "Expand");
                 reportScroll.setPreferredSize(null);
-                rows.revalidate();
-                rows.repaint();
+                revalidate();
+                repaint();
             }
         });
 

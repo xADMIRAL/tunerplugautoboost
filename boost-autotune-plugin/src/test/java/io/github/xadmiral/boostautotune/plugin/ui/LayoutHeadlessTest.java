@@ -7,9 +7,11 @@ import org.junit.jupiter.api.Test;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.Rectangle;
 import java.io.File;
 
@@ -168,5 +170,71 @@ class LayoutHeadlessTest {
             for (int i = 0; i < bgKeys.length; i++) { javax.swing.UIManager.put(bgKeys[i], savedBg[i]); }
             for (int i = 0; i < fgKeys.length; i++) { javax.swing.UIManager.put(fgKeys[i], savedFg[i]); }
         }
+    }
+
+    @Test
+    void windowAsksForHalfTheScreenAndTheAutotuneTabScrollsInsteadOfBeingCut() throws Exception {
+        final File f = File.createTempFile("boost-autotune-layout", ".properties");
+        f.delete();
+        final MainPanel[] holder = new MainPanel[1];
+        SwingUtilities.invokeAndWait(new Runnable() {
+            public void run() {
+                holder[0] = new MainPanel(new SimEcuPort(), new SettingsStore(f));
+            }
+        });
+        final MainPanel p = holder[0];
+        // headless: a 1920 x 1080 screen is assumed by MainPanel.usableScreen()
+        final Dimension pref = p.getPreferredSize();
+        assertTrue(pref.height <= 1080 * MainPanel.WINDOW_HEIGHT_FRACTION + 1, "preferred height " + pref.height);
+        assertTrue(pref.width <= 1920 * MainPanel.WINDOW_WIDTH_FRACTION + 1, "preferred width " + pref.width);
+        assertTrue(pref.height >= 420 && pref.width >= 960, "too small a window: " + pref);
+        AutotunePanel at = p.autotunePanel();
+        JScrollPane scroller = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, at);
+        assertNotNull(scroller, "the Autotune tab sits in a vertical scroller");
+        for (double scale : new double[]{1.25, 1.75}) {
+            final double sc = scale;
+            SwingUtilities.invokeAndWait(new Runnable() {
+                public void run() {
+                    p.setFontScale(sc);
+                }
+            });
+            for (int[] size : new int[][]{{pref.width, pref.height}, {1000, 420}, {1500, 900}}) {
+                layoutAt(p, size[0], size[1]);
+                int content = at.getPreferredSize().height;
+                assertTrue(at.getHeight() >= content - 1, String.format("scale %.2f %dx%d: the tab is %d px high for %d px of content",
+                        sc, size[0], size[1], at.getHeight(), content));
+                int viewport = scroller.getViewport().getHeight();
+                assertTrue(at.getWidth() <= scroller.getViewport().getWidth(), "no horizontal overflow");
+                if (content > viewport) {
+                    assertTrue(scroller.getVerticalScrollBar().isVisible(), String.format("scale %.2f %dx%d: %d px of content in a %d px viewport needs a scrollbar",
+                            sc, size[0], size[1], content, viewport));
+                } else {
+                    assertTrue(at.getHeight() >= viewport - 1, "a tall window is filled, not left to a gap under a short tab");
+                }
+                Rectangle tab = new Rectangle(0, 0, at.getWidth(), at.getHeight());
+                for (JPanel cell : at.liveCells()) {
+                    Rectangle r = SwingUtilities.convertRectangle(cell.getParent(), cell.getBounds(), at);
+                    assertTrue(tab.contains(r), String.format("scale %.2f %dx%d: live cell %s outside the tab %s", sc, size[0], size[1], r, tab));
+                }
+                for (JPanel row : new JPanel[]{at.buttonRow(), at.secondaryRow()}) {
+                    for (Component b : row.getComponents()) {
+                        if (!b.isVisible()) {
+                            continue;
+                        }
+                        Rectangle r = SwingUtilities.convertRectangle(row, b.getBounds(), at);
+                        assertTrue(tab.contains(r), String.format("scale %.2f %dx%d: control %s outside the tab %s", sc, size[0], size[1], r, tab));
+                    }
+                }
+                JScrollPane reportBox = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, at.reportArea());
+                Rectangle rep = SwingUtilities.convertRectangle(reportBox.getParent(), reportBox.getBounds(), at);
+                assertTrue(rep.height >= reportBox.getPreferredSize().height - 1 && rep.y + rep.height <= at.getHeight(),
+                        String.format("scale %.2f %dx%d: report box %s (preferred %d high) inside the tab %s", sc, size[0], size[1], rep, reportBox.getPreferredSize().height, tab));
+            }
+        }
+        SwingUtilities.invokeAndWait(new Runnable() {
+            public void run() {
+                p.dispose();
+            }
+        });
     }
 }

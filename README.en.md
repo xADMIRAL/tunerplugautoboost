@@ -43,6 +43,9 @@ the ECU reports the gear.
 **Layout.** The Autotune tab shows a coloured state pill and a step bar (Start session › Write plan
 › Start run › End run › Apply & next) with the current step and the button to press next
 highlighted. Every settings tab shows only the mode's goals until *Advanced settings* is ticked.
+The window asks TunerStudio for half the screen height (and about 70 % of its width), not the whole
+screen: a tab taller than that (Autotune with large text, Setup, Smooth) scrolls inside the window,
+and the Last run report stays a compact box (*Expand* for more rows).
 
 **Live values and progress.** The live row works from the moment the plugin opens: the bound
 channels are subscribed right away, and when TunerStudio's callbacks stay silent for a second the
